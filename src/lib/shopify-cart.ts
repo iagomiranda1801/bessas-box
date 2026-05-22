@@ -11,10 +11,6 @@ const CART_CHECKOUT_QUERY = `
   }
 `;
 
-/** Exibido quando checkout redireciona para /password (loja com senha ativa). */
-export const CHECKOUT_PASSWORD_STORE_MESSAGE =
-  'A loja Shopify está com senha ("Em breve"). No admin: Loja online → Preferências → desmarque "Restringir acesso" ou remova a senha. Headless também precisa disso para o checkout funcionar.';
-
 const CART_CREATE_MUTATION = `
   mutation cartCreate($input: CartInput!) {
     cartCreate(input: $input) {
@@ -95,11 +91,7 @@ function isCartNotFoundError(userErrors: Array<{ message: string }>) {
 }
 
 function noTokenResult(): CartServerResult {
-  return {
-    ok: false,
-    message:
-      'Sacola indisponível: configure SHOPIFY_STOREFRONT_PRIVATE_TOKEN no servidor.',
-  };
+  return { ok: false, message: 'Não foi possível atualizar a sacola. Tente novamente.' };
 }
 
 export async function serverCartCreate(
@@ -120,7 +112,7 @@ export async function serverCartCreate(
   const cart = payload?.cart;
   const lineId = cart?.lines?.edges?.[0]?.node?.id;
   if (!cart?.id || !cart.checkoutUrl || !lineId) {
-    return { ok: false, message: 'A Shopify não retornou o carrinho. Verifique o canal Headless.' };
+    return { ok: false, message: 'Não foi possível adicionar à sacola. Tente novamente.' };
   }
 
   return {

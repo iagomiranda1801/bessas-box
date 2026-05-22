@@ -36,6 +36,7 @@ export function ProductCard({ product }: { product: ShopifyProduct }) {
       variantTitle: variant.title,
       price: variant.price,
       quantity: 1,
+      quantityAvailable: variant.quantityAvailable ?? null,
       selectedOptions: variant.selectedOptions || [],
     });
     if (result.ok) {

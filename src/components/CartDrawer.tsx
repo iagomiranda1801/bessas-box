@@ -6,7 +6,7 @@ import { Sheet, SheetContent, SheetDescription, SheetHeader, SheetTitle, SheetTr
 import { ShoppingBag, Minus, Plus, Trash2, ExternalLink, Loader2 } from "lucide-react";
 import { useCartStore } from "@/stores/cartStore";
 import { cartCheckoutFn } from "@/lib/cart.server";
-import { CHECKOUT_PASSWORD_STORE_MESSAGE } from "@/lib/shopify-cart";
+import { getMaxPurchasableQuantity } from "@/lib/inventory";
 import { toast } from "sonner";
 
 export const CartDrawer = () => {
@@ -22,31 +22,23 @@ export const CartDrawer = () => {
   }, [isOpen, syncCart]);
 
   const handleCheckout = async () => {
-    if (!cartId) {
-      toast.error("Sacola vazia ou expirada. Adicione um produto novamente.", {
-        position: "top-center",
-      });
-      return;
-    }
+    if (!cartId) return;
 
     setIsCheckoutLoading(true);
     try {
       const result = await cartCheckoutFn({ data: { cartId } });
       if (!result.ok) {
-        toast.error(result.message, { position: "top-center", duration: 6000 });
+        toast.error("Não foi possível abrir o pagamento. Tente de novo.", {
+          position: "top-center",
+        });
         return;
       }
 
       useCartStore.setState({ checkoutUrl: result.checkoutUrl });
       window.open(result.checkoutUrl, "_blank", "noopener,noreferrer");
       setIsOpen(false);
-      toast.info("Checkout aberto em nova aba", {
-        position: "top-center",
-        description: CHECKOUT_PASSWORD_STORE_MESSAGE,
-        duration: 10000,
-      });
     } catch {
-      toast.error("Não foi possível abrir o checkout. Tente novamente.", {
+      toast.error("Não foi possível abrir o pagamento. Tente de novo.", {
         position: "top-center",
       });
     } finally {
@@ -55,17 +47,20 @@ export const CartDrawer = () => {
   };
 
   const handleUpdateQuantity = async (variantId: string, quantity: number) => {
-    const ok = await updateQuantity(variantId, quantity);
-    if (!ok) {
-      toast.error("Não foi possível atualizar a quantidade.", { position: "top-center" });
+    const result = await updateQuantity(variantId, quantity);
+    if (!result.ok) {
+      toast.error(result.message, { position: "top-center" });
     }
   };
 
+  const getItemMax = (quantityAvailable: number | null | undefined) =>
+    getMaxPurchasableQuantity({
+      availableForSale: true,
+      quantityAvailable: quantityAvailable ?? null,
+    });
+
   const handleRemove = async (variantId: string) => {
-    const ok = await removeItem(variantId);
-    if (!ok) {
-      toast.error("Não foi possível remover o item.", { position: "top-center" });
-    }
+    await removeItem(variantId);
   };
 
   return (
@@ -109,7 +104,10 @@ export const CartDrawer = () => {
             <>
               <div className="flex-1 overflow-y-auto pr-2 min-h-0">
                 <ul className="space-y-4">
-                  {items.map((item) => (
+                  {items.map((item) => {
+                    const maxQty = getItemMax(item.quantityAvailable);
+                    const atMax = maxQty != null && item.quantity >= maxQty;
+                    return (
                     <li
                       key={item.variantId}
                       className="flex gap-4 p-3 border border-border rounded-md bg-card/50"
@@ -143,6 +141,11 @@ export const CartDrawer = () => {
                         <p className="font-semibold text-gold mt-1">
                           {currency} {parseFloat(item.price.amount).toFixed(2)}
                         </p>
+                        {maxQty != null && maxQty > 0 && maxQty <= 10 && (
+                          <p className="text-xs text-muted-foreground mt-0.5">
+                            {maxQty === 1 ? "Última unidade" : `${maxQty} em estoque`}
+                          </p>
+                        )}
                       </div>
                       <div className="flex flex-col items-end gap-2 flex-shrink-0">
                         <Button
@@ -172,6 +175,7 @@ export const CartDrawer = () => {
                             size="icon"
                             className="h-6 w-6"
                             onClick={() => handleUpdateQuantity(item.variantId, item.quantity + 1)}
+                            disabled={atMax}
                             aria-label="Aumentar quantidade"
                           >
                             <Plus className="h-3 w-3" aria-hidden="true" />
@@ -179,7 +183,8 @@ export const CartDrawer = () => {
                         </div>
                       </div>
                     </li>
-                  ))}
+                    );
+                  })}
                 </ul>
               </div>
               <div className="flex-shrink-0 space-y-4 pt-4 border-t border-gold/20 bg-background">

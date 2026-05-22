@@ -61,6 +61,7 @@ function ProductPage() {
       variantTitle: selectedVariant.title,
       price: selectedVariant.price,
       quantity: 1,
+      quantityAvailable: selectedVariant.quantityAvailable ?? null,
       selectedOptions: selectedVariant.selectedOptions || [],
     });
     if (result.ok) {
@@ -180,6 +181,15 @@ function ProductPage() {
             {!selectedVariant?.availableForSale && (
               <p className="text-sm text-muted-foreground">Produto esgotado nesta variação.</p>
             )}
+            {selectedVariant?.availableForSale &&
+              selectedVariant.quantityAvailable != null &&
+              selectedVariant.quantityAvailable <= 10 && (
+                <p className="text-sm text-muted-foreground">
+                  {selectedVariant.quantityAvailable === 1
+                    ? "Última unidade em estoque"
+                    : `${selectedVariant.quantityAvailable} unidades em estoque`}
+                </p>
+              )}
           </div>
         </div>
       </main>
