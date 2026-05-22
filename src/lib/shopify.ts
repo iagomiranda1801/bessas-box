@@ -1,7 +1,38 @@
 export const SHOPIFY_API_VERSION = '2025-07';
-export const SHOPIFY_STORE_PERMANENT_DOMAIN = 'seven-cups-magic-pjj0d.myshopify.com';
+export const SHOPIFY_STORE_PERMANENT_DOMAIN =
+  import.meta.env.VITE_SHOPIFY_STORE_DOMAIN ?? 'iwqyh2-ky.myshopify.com';
 export const SHOPIFY_STOREFRONT_URL = `https://${SHOPIFY_STORE_PERMANENT_DOMAIN}/api/${SHOPIFY_API_VERSION}/graphql.json`;
-export const SHOPIFY_STOREFRONT_TOKEN = '9b46e2ffc777612d54c64b03cd8e38a6';
+
+/** Token público Headless — só no cliente (sacola/checkout). */
+export const SHOPIFY_STOREFRONT_PUBLIC_TOKEN =
+  import.meta.env.VITE_SHOPIFY_STOREFRONT_TOKEN ?? '';
+
+function getPrivateStorefrontToken(): string {
+  if (typeof window !== 'undefined') return '';
+  return process.env.SHOPIFY_STOREFRONT_PRIVATE_TOKEN?.trim() ?? '';
+}
+
+function getStorefrontAuthHeaders(): Record<string, string> | null {
+  const privateToken = getPrivateStorefrontToken();
+  if (privateToken) {
+    return {
+      'Content-Type': 'application/json',
+      'Shopify-Storefront-Private-Token': privateToken,
+    };
+  }
+  const publicToken = SHOPIFY_STOREFRONT_PUBLIC_TOKEN?.trim();
+  if (publicToken) {
+    return {
+      'Content-Type': 'application/json',
+      'X-Shopify-Storefront-Access-Token': publicToken,
+    };
+  }
+  return null;
+}
+
+export function hasStorefrontToken(): boolean {
+  return getStorefrontAuthHeaders() !== null;
+}
 
 export interface ShopifyProduct {
   node: {
@@ -31,12 +62,13 @@ export interface ShopifyProduct {
 }
 
 export async function storefrontApiRequest(query: string, variables: Record<string, unknown> = {}) {
+  const headers = getStorefrontAuthHeaders();
+  if (!headers) {
+    return null;
+  }
   const response = await fetch(SHOPIFY_STOREFRONT_URL, {
     method: 'POST',
-    headers: {
-      'Content-Type': 'application/json',
-      'X-Shopify-Storefront-Access-Token': SHOPIFY_STOREFRONT_TOKEN,
-    },
+    headers,
     body: JSON.stringify({ query, variables }),
   });
 
@@ -103,11 +135,13 @@ export const PRODUCT_BY_HANDLE_QUERY = `
 `;
 
 export async function fetchProducts(first = 20, query?: string): Promise<ShopifyProduct[]> {
+  if (!hasStorefrontToken()) return [];
   const data = await storefrontApiRequest(PRODUCTS_QUERY, { first, query });
   return data?.data?.products?.edges ?? [];
 }
 
 export async function fetchProductByHandle(handle: string): Promise<ShopifyProduct | null> {
+  if (!hasStorefrontToken()) return null;
   const data = await storefrontApiRequest(PRODUCT_BY_HANDLE_QUERY, { handle });
   const product = data?.data?.product;
   if (!product) return null;

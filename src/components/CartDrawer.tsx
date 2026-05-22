@@ -5,11 +5,14 @@ import { Badge } from "@/components/ui/badge";
 import { Sheet, SheetContent, SheetDescription, SheetHeader, SheetTitle, SheetTrigger } from "@/components/ui/sheet";
 import { ShoppingBag, Minus, Plus, Trash2, ExternalLink, Loader2 } from "lucide-react";
 import { useCartStore } from "@/stores/cartStore";
+import { cartCheckoutFn } from "@/lib/cart.server";
+import { CHECKOUT_PASSWORD_STORE_MESSAGE } from "@/lib/shopify-cart";
 import { toast } from "sonner";
 
 export const CartDrawer = () => {
   const [isOpen, setIsOpen] = useState(false);
-  const { items, isLoading, isSyncing, updateQuantity, removeItem, getCheckoutUrl, syncCart } = useCartStore();
+  const [isCheckoutLoading, setIsCheckoutLoading] = useState(false);
+  const { items, cartId, isLoading, isSyncing, updateQuantity, removeItem, syncCart } = useCartStore();
   const totalItems = items.reduce((sum, item) => sum + item.quantity, 0);
   const totalPrice = items.reduce((sum, item) => sum + (parseFloat(item.price.amount) * item.quantity), 0);
   const currency = items[0]?.price.currencyCode ?? "BRL";
@@ -18,17 +21,37 @@ export const CartDrawer = () => {
     if (isOpen) syncCart();
   }, [isOpen, syncCart]);
 
-  const handleCheckout = () => {
-    const checkoutUrl = getCheckoutUrl();
-    if (checkoutUrl) {
-      window.open(checkoutUrl, "_blank", "noopener,noreferrer");
-      setIsOpen(false);
-      toast.info("Checkout aberto em nova aba", { position: "top-center" });
+  const handleCheckout = async () => {
+    if (!cartId) {
+      toast.error("Sacola vazia ou expirada. Adicione um produto novamente.", {
+        position: "top-center",
+      });
       return;
     }
-    toast.error("Não foi possível abrir o checkout. Tente adicionar um produto novamente.", {
-      position: "top-center",
-    });
+
+    setIsCheckoutLoading(true);
+    try {
+      const result = await cartCheckoutFn({ data: { cartId } });
+      if (!result.ok) {
+        toast.error(result.message, { position: "top-center", duration: 6000 });
+        return;
+      }
+
+      useCartStore.setState({ checkoutUrl: result.checkoutUrl });
+      window.open(result.checkoutUrl, "_blank", "noopener,noreferrer");
+      setIsOpen(false);
+      toast.info("Checkout aberto em nova aba", {
+        position: "top-center",
+        description: CHECKOUT_PASSWORD_STORE_MESSAGE,
+        duration: 10000,
+      });
+    } catch {
+      toast.error("Não foi possível abrir o checkout. Tente novamente.", {
+        position: "top-center",
+      });
+    } finally {
+      setIsCheckoutLoading(false);
+    }
   };
 
   const handleUpdateQuantity = async (variantId: string, quantity: number) => {
@@ -170,9 +193,9 @@ export const CartDrawer = () => {
                   onClick={handleCheckout}
                   className="w-full bg-gold text-onyx hover:bg-gold-soft font-medium tracking-wide"
                   size="lg"
-                  disabled={isLoading || isSyncing}
+                  disabled={isLoading || isSyncing || isCheckoutLoading}
                 >
-                  {isLoading || isSyncing ? (
+                  {isLoading || isSyncing || isCheckoutLoading ? (
                     <Loader2 className="w-4 h-4 animate-spin" aria-hidden="true" />
                   ) : (
                     <>

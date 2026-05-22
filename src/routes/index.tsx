@@ -1,14 +1,22 @@
 import { createFileRoute } from "@tanstack/react-router";
-import { useQuery } from "@tanstack/react-query";
 import { Gem, Truck, ShieldCheck, Instagram } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { SiteHeader } from "@/components/SiteHeader";
 import { ProductCard } from "@/components/ProductCard";
-import { fetchProducts } from "@/lib/shopify";
+import { fetchProductsForStore } from "@/lib/catalog";
 import logo from "@/assets/bessa-logo.png";
 import heroImg from "@/assets/verm.jpeg";
 
 export const Route = createFileRoute("/")({
+  loader: async () => {
+    try {
+      const products = await fetchProductsForStore(24);
+      return { products };
+    } catch (error) {
+      console.error("Home loader failed:", error);
+      return { products: [] };
+    }
+  },
   component: Index,
   head: () => ({
     meta: [
@@ -30,10 +38,7 @@ export const Route = createFileRoute("/")({
 });
 
 function Index() {
-  const { data: products = [], isLoading } = useQuery({
-    queryKey: ["products"],
-    queryFn: () => fetchProducts(24),
-  });
+  const { products } = Route.useLoaderData();
 
   return (
     <div className="min-h-screen bg-background text-foreground">
@@ -131,22 +136,13 @@ function Index() {
               </p>
             </div>
 
-            {isLoading ? (
-              <div
-                className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-4"
-                aria-busy="true"
-                aria-label="Carregando produtos"
-              >
-                {Array.from({ length: 8 }).map((_, i) => (
-                  <div key={i} className="aspect-square bg-card animate-pulse rounded-md" />
-                ))}
-              </div>
-            ) : products.length === 0 ? (
+            {products.length === 0 ? (
               <div className="border border-dashed border-gold/30 rounded-md p-12 text-center">
                 <p className="font-display text-2xl mb-2">Nenhum produto encontrado</p>
                 <p className="text-muted-foreground text-sm max-w-md mx-auto">
-                  Sua loja ainda não tem produtos cadastrados. Volte em breve para conferir as
-                  próximas peças da coleção.
+                  Nenhum produto visível no catálogo. Confira se o produto está ativo na Shopify e
+                  se o app tem permissão <strong>read_products</strong>, ou configure o token
+                  Headless (Storefront API) no .env.
                 </p>
               </div>
             ) : (

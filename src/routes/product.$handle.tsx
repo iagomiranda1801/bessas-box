@@ -1,23 +1,23 @@
 import { createFileRoute, Link, notFound } from "@tanstack/react-router";
-import { useQuery } from "@tanstack/react-query";
 import { useState } from "react";
 import { ArrowLeft, Loader2, ShoppingBag } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { SiteHeader } from "@/components/SiteHeader";
-import { fetchProductByHandle } from "@/lib/shopify";
+import { fetchProductByHandleForStore } from "@/lib/catalog";
 import { useCartStore } from "@/stores/cartStore";
 import { toast } from "sonner";
 import { cn } from "@/lib/utils";
 
 export const Route = createFileRoute("/product/$handle")({
-  loader: async ({ params, context }) => {
-    const product = await context.queryClient.ensureQueryData({
-      queryKey: ["product", params.handle],
-      queryFn: () => fetchProductByHandle(params.handle),
-    });
+  loader: async ({ params }) => {
+    const product = await fetchProductByHandleForStore(params.handle);
+    if (!product) throw notFound();
     return {
-      title: product?.node.title ?? params.handle,
-      description: product?.node.description?.slice(0, 160) ?? `Produto Bessa's Box: ${params.handle}`,
+      product,
+      title: product.node.title,
+      description:
+        product.node.description?.slice(0, 160) ??
+        `Produto Bessa's Box: ${params.handle}`,
     };
   },
   head: ({ loaderData }) => ({
@@ -40,26 +40,11 @@ export const Route = createFileRoute("/product/$handle")({
 });
 
 function ProductPage() {
-  const { handle } = Route.useParams();
+  const { product } = Route.useLoaderData();
   const addItem = useCartStore((s) => s.addItem);
   const isLoading = useCartStore((s) => s.isLoading);
   const [selectedVariantId, setSelectedVariantId] = useState<string | null>(null);
   const [selectedImageIndex, setSelectedImageIndex] = useState(0);
-
-  const { data: product, isLoading: loading, isError } = useQuery({
-    queryKey: ["product", handle],
-    queryFn: () => fetchProductByHandle(handle),
-  });
-
-  if (loading) {
-    return (
-      <div className="min-h-screen flex items-center justify-center bg-background">
-        <Loader2 className="w-8 h-8 animate-spin text-gold" aria-label="Carregando produto" />
-      </div>
-    );
-  }
-
-  if (isError || !product) throw notFound();
 
   const variants = product.node.variants.edges;
   const selectedVariant =
