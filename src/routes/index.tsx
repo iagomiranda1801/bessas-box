@@ -1,22 +1,70 @@
-import { createFileRoute } from "@tanstack/react-router";
-import { Gem, Truck, ShieldCheck, Instagram } from "lucide-react";
+import { useEffect } from "react";
+import { createFileRoute, Link } from "@tanstack/react-router";
+import { SectionAnchor } from "@/components/SectionAnchor";
+import { Gem, Truck, ShieldCheck, ArrowRight } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { SiteHeader } from "@/components/SiteHeader";
-import { ProductCard } from "@/components/ProductCard";
-import { fetchProductsForStore } from "@/lib/catalog";
-import logo from "@/assets/bessa-logo.png";
-import heroImg from "@/assets/verm.jpeg";
+import { SiteFooter } from "@/components/SiteFooter";
+import { HeroSlider, type HeroSlide } from "@/components/HeroSlider";
+import heroVerm from "@/assets/verm.jpeg";
+import heroPreto from "@/assets/preto.jpeg";
+import heroBessa from "@/assets/bessa-hero.jpg";
+
+const HERO_SLIDES: HeroSlide[] = [
+  {
+    id: "colecao",
+    image: heroVerm,
+    imageAlt: "Peça em destaque vermelha",
+    badge: "Nova coleção",
+    badgeIcon: "gem",
+    title: (
+      <>
+        <span className="text-foreground">Elegância casual</span>
+        <br />
+        <span className="text-gradient-gold">em cada detalhe</span>
+      </>
+    ),
+    subtitle:
+      "Tênis, camisetas e polos com corte impecável. Curadoria Bessa's Box para quem valoriza conforto e presença.",
+    primaryCta: { label: "Ver coleção", href: "/colecao" },
+    secondaryCta: { label: "A marca", href: "#marca" },
+  },
+  {
+    id: "curadoria",
+    image: heroPreto,
+    imageAlt: "Peça em destaque preta",
+    badge: "Curadoria premium",
+    badgeIcon: "shield",
+    title: (
+      <>
+        <span className="text-foreground">Peças</span>
+        <br />
+        <span className="text-gradient-gold">selecionadas à mão</span>
+      </>
+    ),
+    subtitle: "Quantidades limitadas. Cada modelo passa pelo olhar da casa antes de chegar até você.",
+    primaryCta: { label: "Ver destaques", href: "/destaques" },
+    secondaryCta: { label: "Explorar tudo", href: "/colecao" },
+  },
+  {
+    id: "entrega",
+    image: heroBessa,
+    imageAlt: "Bessa's Box",
+    badge: "Entrega nacional",
+    badgeIcon: "truck",
+    title: (
+      <>
+        <span className="text-foreground">Do nosso box</span>
+        <br />
+        <span className="text-gradient-gold">para todo o Brasil</span>
+      </>
+    ),
+    subtitle: "Compre com segurança. Originalidade garantida e envio para onde você estiver.",
+    primaryCta: { label: "Comprar agora", href: "/colecao" },
+  },
+];
 
 export const Route = createFileRoute("/")({
-  loader: async () => {
-    try {
-      const products = await fetchProductsForStore(24);
-      return { products };
-    } catch (error) {
-      console.error("Home loader failed:", error);
-      return { products: [] };
-    }
-  },
   component: Index,
   head: () => ({
     meta: [
@@ -31,14 +79,24 @@ export const Route = createFileRoute("/")({
         property: "og:description",
         content: "Elegância casual. Tênis, camisetas e polos premium.",
       },
-      { property: "og:image", content: heroImg },
-      { name: "twitter:image", content: heroImg },
+      { property: "og:image", content: heroVerm },
+      { name: "twitter:image", content: heroVerm },
     ],
   }),
 });
 
 function Index() {
-  const { products } = Route.useLoaderData();
+  useEffect(() => {
+    const scrollToHash = () => {
+      const hash = window.location.hash;
+      if (!hash) return;
+      const el = document.querySelector(hash);
+      if (el) el.scrollIntoView({ behavior: "smooth", block: "start" });
+    };
+    scrollToHash();
+    window.addEventListener("hashchange", scrollToHash);
+    return () => window.removeEventListener("hashchange", scrollToHash);
+  }, []);
 
   return (
     <div className="min-h-screen bg-background text-foreground">
@@ -52,171 +110,105 @@ function Index() {
       <SiteHeader />
 
       <main id="conteudo-principal">
-        {/* HERO */}
-        <section className="relative pt-16 min-h-[85svh] flex items-center overflow-hidden">
-          <div className="absolute inset-0 flex items-center justify-center" aria-hidden="true">
-            <img
-              src={heroImg}
-              alt=""
-              className="h-full max-h-[min(85svh,720px)] w-auto max-w-full object-contain opacity-45"
-            />
-            <div className="absolute inset-0 bg-gradient-to-b from-background/40 via-background/70 to-background" />
-            <div className="absolute inset-0 bg-gold-radial" />
-          </div>
-          <div className="relative max-w-7xl mx-auto px-4 sm:px-6 py-20 w-full">
-            <div className="max-w-2xl space-y-6">
-              <div className="inline-flex items-center gap-2 px-3 py-1 border border-gold/40 rounded-full text-xs tracking-wide text-gold">
-                <Gem className="w-3 h-3" aria-hidden="true" /> Nova coleção
-              </div>
-              <h1 className="font-display text-5xl sm:text-7xl md:text-8xl leading-[1.05]">
-                <span className="text-foreground">Elegância casual</span>
-                <br />
-                <span className="text-gradient-gold">em cada detalhe</span>
-              </h1>
-              <p className="text-lg text-muted-foreground max-w-lg">
-                Tênis, camisetas e polos com corte impecável e acabamento premium. Curadoria
-                Bessa's Box para quem valoriza conforto e presença.
-              </p>
-              <p className="text-sm text-gold/80 tracking-wide">Tênis · Camisetas · Polos</p>
-              <div className="flex flex-wrap gap-3 pt-2">
-                <Button
-                  asChild
-                  size="lg"
-                  className="bg-gold text-onyx hover:bg-gold-soft font-medium tracking-wide"
-                >
-                  <a href="#colecao">Ver coleção</a>
-                </Button>
-                <Button
-                  asChild
-                  size="lg"
-                  variant="outline"
-                  className="border-gold/50 text-foreground hover:bg-gold/10 font-medium tracking-wide"
-                >
-                  <a href="#marca">A marca</a>
-                </Button>
-              </div>
-            </div>
-          </div>
-        </section>
+        <HeroSlider slides={HERO_SLIDES} />
 
-        {/* TRUST BAR */}
-        <section className="border-y border-gold/20 bg-card/30" aria-label="Benefícios da loja">
-          <div className="max-w-7xl mx-auto px-4 sm:px-6 py-6 grid grid-cols-1 sm:grid-cols-3 gap-6">
+        <section className="border-y border-gold/20 bg-card/30 backdrop-blur-sm" aria-label="Benefícios da loja">
+          <div className="max-w-7xl mx-auto px-4 sm:px-6 py-8 grid grid-cols-1 sm:grid-cols-3 gap-8">
             {[
               { icon: Truck, title: "Entrega Brasil", desc: "Para todo o país" },
               { icon: ShieldCheck, title: "100% Original", desc: "Garantia da casa" },
-              { icon: Gem, title: "Coleção Selecionada", desc: "Peças em quantidade limitada" },
-            ].map((f) => (
-              <div key={f.title} className="flex items-center gap-3">
+              { icon: Gem, title: "Coleção Selecionada", desc: "Edição limitada" },
+            ].map((f, i) => (
+              <div
+                key={f.title}
+                className="flex items-center gap-4 animate-fade-in-up"
+                style={{ animationDelay: `${i * 100}ms` }}
+              >
                 <div
-                  className="w-10 h-10 rounded-full border border-gold/40 flex items-center justify-center text-gold"
+                  className="w-12 h-12 rounded-full border border-gold/40 flex items-center justify-center text-gold bg-gold/5"
                   aria-hidden="true"
                 >
                   <f.icon className="w-5 h-5" />
                 </div>
                 <div>
-                  <p className="font-medium tracking-wide text-sm">{f.title}</p>
-                  <p className="text-xs text-muted-foreground">{f.desc}</p>
+                  <p className="font-medium tracking-wide">{f.title}</p>
+                  <p className="text-sm text-muted-foreground">{f.desc}</p>
                 </div>
               </div>
             ))}
           </div>
         </section>
 
-        {/* COLEÇÃO */}
-        <section id="colecao" className="py-20 sm:py-28">
+        <section className="py-16 sm:py-20">
           <div className="max-w-7xl mx-auto px-4 sm:px-6">
-            <div className="flex items-end justify-between mb-10 gap-4">
-              <div>
-                <p className="text-gold text-xs tracking-wide mb-2">Catálogo</p>
-                <h2 className="font-display text-4xl sm:text-5xl">A coleção</h2>
-              </div>
-              <p className="hidden sm:block text-sm text-muted-foreground max-w-sm text-right">
-                Cada peça passa por curadoria da casa. Quantidades limitadas por modelo.
-              </p>
-            </div>
-
-            {products.length === 0 ? (
-              <div className="border border-dashed border-gold/30 rounded-md p-12 text-center">
-                <p className="font-display text-2xl mb-2">Nenhum produto encontrado</p>
-                <p className="text-muted-foreground text-sm max-w-md mx-auto">
-                  Nenhum produto visível no catálogo. Confira se o produto está ativo na Shopify e
-                  se o app tem permissão <strong>read_products</strong>, ou configure o token
-                  Headless (Storefront API) no .env.
-                </p>
-              </div>
-            ) : (
-              <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-4">
-                {products.map((p) => (
-                  <ProductCard key={p.node.id} product={p} />
-                ))}
-              </div>
-            )}
-          </div>
-        </section>
-
-        {/* MARCA */}
-        <section id="marca" className="py-20 sm:py-28 bg-card/30 border-y border-gold/20">
-          <div className="max-w-5xl mx-auto px-4 sm:px-6 text-center space-y-6">
-            <p className="text-gold text-xs tracking-wide">A marca</p>
-            <h2 className="font-display text-4xl sm:text-6xl">
-              <span className="text-gradient-gold">Bessa's Box</span> é estilo atemporal.
-            </h2>
-            <p className="text-lg text-muted-foreground max-w-2xl mx-auto">
-              Moda premium casual para o dia a dia exigente: conforto, caimento perfeito e
-              presença discreta. Cada peça é escolhida para combinar tênis, camisetas e polos com
-              a mesma linguagem de elegância.
-            </p>
-          </div>
-        </section>
-
-        {/* CONTATO / FOOTER */}
-        <footer id="contato" className="py-16">
-          <div className="max-w-7xl mx-auto px-4 sm:px-6 grid grid-cols-1 md:grid-cols-3 gap-10">
-            <div className="space-y-4">
-              <img src={logo} alt="Bessa's Box" className="h-12 w-auto" />
-              <p className="text-sm text-muted-foreground max-w-xs">
-                Tênis, camisetas e polos. Moda premium com entrega para todo o Brasil.
-              </p>
-            </div>
-            <div className="space-y-3">
-              <p className="font-display text-lg">Navegação</p>
-              <ul className="space-y-2 text-sm text-muted-foreground">
-                <li>
-                  <a href="#colecao" className="hover:text-gold">
-                    Coleção
-                  </a>
-                </li>
-                <li>
-                  <a href="#marca" className="hover:text-gold">
-                    A marca
-                  </a>
-                </li>
-                <li>
-                  <a href="#contato" className="hover:text-gold">
-                    Contato
-                  </a>
-                </li>
-              </ul>
-            </div>
-            <div className="space-y-3">
-              <p className="font-display text-lg">Fale com a gente</p>
-              <a
-                href="https://www.instagram.com/bessasbox"
-                target="_blank"
-                rel="noopener noreferrer"
-                className="inline-flex items-center gap-2 text-sm hover:text-gold"
-                aria-label="Instagram da Bessa's Box (abre em nova aba)"
+            <div className="grid sm:grid-cols-2 gap-4">
+              <Link
+                to="/destaques"
+                className="group premium-card rounded-xl p-8 sm:p-10 flex flex-col justify-between min-h-[200px] animate-fade-in-up"
               >
-                <Instagram className="w-4 h-4" aria-hidden="true" /> @bessasbox
-              </a>
+                <div className="space-y-2">
+                  <p className="text-gold text-xs tracking-[0.25em] uppercase">Curadoria</p>
+                  <h2 className="font-display text-3xl sm:text-4xl">Destaques</h2>
+                  <p className="text-muted-foreground text-sm max-w-xs">
+                    A seleção da casa — peças em evidência com estoque limitado.
+                  </p>
+                </div>
+                <span className="inline-flex items-center gap-2 text-gold text-sm font-medium mt-6 group-hover:gap-3 transition-all">
+                  Explorar <ArrowRight className="w-4 h-4" aria-hidden="true" />
+                </span>
+              </Link>
+
+              <Link
+                to="/colecao"
+                className="group premium-card rounded-xl p-8 sm:p-10 flex flex-col justify-between min-h-[200px] animate-fade-in-up"
+                style={{ animationDelay: "100ms" }}
+              >
+                <div className="space-y-2">
+                  <p className="text-gold text-xs tracking-[0.25em] uppercase">Catálogo</p>
+                  <h2 className="font-display text-3xl sm:text-4xl">Coleção</h2>
+                  <p className="text-muted-foreground text-sm max-w-xs">
+                    Todos os produtos disponíveis para compra.
+                  </p>
+                </div>
+                <span className="inline-flex items-center gap-2 text-gold text-sm font-medium mt-6 group-hover:gap-3 transition-all">
+                  Ver tudo <ArrowRight className="w-4 h-4" aria-hidden="true" />
+                </span>
+              </Link>
             </div>
           </div>
-          <div className="max-w-7xl mx-auto px-4 sm:px-6 mt-10 pt-6 border-t border-gold/20 text-xs text-muted-foreground flex flex-col sm:flex-row sm:justify-between gap-2">
-            <p>© {new Date().getFullYear()} Bessa's Box. Todos os direitos reservados.</p>
-            <p className="text-gold/70">Premium casual</p>
+        </section>
+
+        <section className="py-24 sm:py-32 relative overflow-hidden">
+          <SectionAnchor id="marca" />
+          <div className="absolute inset-0 bg-gold-radial-strong opacity-60" aria-hidden="true" />
+          <div className="relative max-w-5xl mx-auto px-4 sm:px-6 text-center space-y-8">
+            <p className="text-gold text-xs tracking-[0.25em] uppercase">A marca</p>
+            <h2 className="font-display text-4xl sm:text-6xl md:text-7xl leading-tight">
+              <span className="text-gradient-gold">Bessa's Box</span>
+              <br />
+              <span className="text-foreground text-3xl sm:text-5xl">é estilo atemporal</span>
+            </h2>
+            <p className="text-lg text-muted-foreground max-w-2xl mx-auto leading-relaxed">
+              Moda premium casual para o dia a dia exigente: conforto, caimento perfeito e presença
+              discreta. Tênis, camisetas e polos com a mesma linguagem de elegância.
+            </p>
+            <div className="flex flex-wrap justify-center gap-4 pt-4">
+              <Button asChild size="lg" className="bg-gold text-onyx hover:bg-gold-soft font-medium tracking-wide">
+                <Link to="/destaques">Ver destaques</Link>
+              </Button>
+              <Button
+                asChild
+                size="lg"
+                variant="outline"
+                className="border-gold/50 hover:bg-gold/10 font-medium tracking-wide"
+              >
+                <Link to="/colecao">Ver coleção</Link>
+              </Button>
+            </div>
           </div>
-        </footer>
+        </section>
+
+        <SiteFooter />
       </main>
     </div>
   );
