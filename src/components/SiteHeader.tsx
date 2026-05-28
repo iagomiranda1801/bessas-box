@@ -14,6 +14,7 @@ type NavLink =
 const NAV_LINKS: NavLink[] = [
   { type: "route", to: "/destaques", label: "Destaques" },
   { type: "route", to: "/colecao", label: "Coleção" },
+  { type: "route", to: "/parcerias", label: "Parcerias" },
   { type: "hash", hash: "marca", label: "A Marca" },
   { type: "hash", hash: "contato", label: "Contato" },
 ];

@@ -9,11 +9,17 @@
 // Additionally, you should also exclude this file from your linter and/or formatter to prevent it from being checked or modified.
 
 import { Route as rootRouteImport } from './routes/__root'
+import { Route as ParceriasRouteImport } from './routes/parcerias'
 import { Route as DestaquesRouteImport } from './routes/destaques'
 import { Route as ColecaoRouteImport } from './routes/colecao'
 import { Route as IndexRouteImport } from './routes/index'
 import { Route as ProductHandleRouteImport } from './routes/product.$handle'
 
+const ParceriasRoute = ParceriasRouteImport.update({
+  id: '/parcerias',
+  path: '/parcerias',
+  getParentRoute: () => rootRouteImport,
+} as any)
 const DestaquesRoute = DestaquesRouteImport.update({
   id: '/destaques',
   path: '/destaques',
@@ -39,12 +45,14 @@ export interface FileRoutesByFullPath {
   '/': typeof IndexRoute
   '/colecao': typeof ColecaoRoute
   '/destaques': typeof DestaquesRoute
+  '/parcerias': typeof ParceriasRoute
   '/product/$handle': typeof ProductHandleRoute
 }
 export interface FileRoutesByTo {
   '/': typeof IndexRoute
   '/colecao': typeof ColecaoRoute
   '/destaques': typeof DestaquesRoute
+  '/parcerias': typeof ParceriasRoute
   '/product/$handle': typeof ProductHandleRoute
 }
 export interface FileRoutesById {
@@ -52,25 +60,40 @@ export interface FileRoutesById {
   '/': typeof IndexRoute
   '/colecao': typeof ColecaoRoute
   '/destaques': typeof DestaquesRoute
+  '/parcerias': typeof ParceriasRoute
   '/product/$handle': typeof ProductHandleRoute
 }
 export interface FileRouteTypes {
   fileRoutesByFullPath: FileRoutesByFullPath
-  fullPaths: '/' | '/colecao' | '/destaques' | '/product/$handle'
+  fullPaths: '/' | '/colecao' | '/destaques' | '/parcerias' | '/product/$handle'
   fileRoutesByTo: FileRoutesByTo
-  to: '/' | '/colecao' | '/destaques' | '/product/$handle'
-  id: '__root__' | '/' | '/colecao' | '/destaques' | '/product/$handle'
+  to: '/' | '/colecao' | '/destaques' | '/parcerias' | '/product/$handle'
+  id:
+    | '__root__'
+    | '/'
+    | '/colecao'
+    | '/destaques'
+    | '/parcerias'
+    | '/product/$handle'
   fileRoutesById: FileRoutesById
 }
 export interface RootRouteChildren {
   IndexRoute: typeof IndexRoute
   ColecaoRoute: typeof ColecaoRoute
   DestaquesRoute: typeof DestaquesRoute
+  ParceriasRoute: typeof ParceriasRoute
   ProductHandleRoute: typeof ProductHandleRoute
 }
 
 declare module '@tanstack/react-router' {
   interface FileRoutesByPath {
+    '/parcerias': {
+      id: '/parcerias'
+      path: '/parcerias'
+      fullPath: '/parcerias'
+      preLoaderRoute: typeof ParceriasRouteImport
+      parentRoute: typeof rootRouteImport
+    }
     '/destaques': {
       id: '/destaques'
       path: '/destaques'
@@ -106,6 +129,7 @@ const rootRouteChildren: RootRouteChildren = {
   IndexRoute: IndexRoute,
   ColecaoRoute: ColecaoRoute,
   DestaquesRoute: DestaquesRoute,
+  ParceriasRoute: ParceriasRoute,
   ProductHandleRoute: ProductHandleRoute,
 }
 export const routeTree = rootRouteImport

@@ -1,7 +1,28 @@
 export const SHOPIFY_API_VERSION = '2025-07';
-export const SHOPIFY_STORE_PERMANENT_DOMAIN =
-  import.meta.env.VITE_SHOPIFY_STORE_DOMAIN ?? 'iwqyh2-ky.myshopify.com';
-export const SHOPIFY_STOREFRONT_URL = `https://${SHOPIFY_STORE_PERMANENT_DOMAIN}/api/${SHOPIFY_API_VERSION}/graphql.json`;
+const DEFAULT_STORE_DOMAIN = 'uvhyj5-ty.myshopify.com';
+
+/** Admin/shpat não funciona como token público Storefront no browser. */
+function isAdminApiToken(token: string): boolean {
+  return token.startsWith('shpat_') || token.startsWith('shpua_');
+}
+
+/** Domínio permanente da loja — no SSR prioriza SHOPIFY_STORE_DOMAIN (servidor). */
+export function getShopifyStoreDomain(): string {
+  if (typeof window === 'undefined') {
+    return (
+      process.env.SHOPIFY_STORE_DOMAIN?.trim() ||
+      import.meta.env.VITE_SHOPIFY_STORE_DOMAIN ||
+      DEFAULT_STORE_DOMAIN
+    );
+  }
+  return import.meta.env.VITE_SHOPIFY_STORE_DOMAIN || DEFAULT_STORE_DOMAIN;
+}
+
+export const SHOPIFY_STORE_PERMANENT_DOMAIN = getShopifyStoreDomain();
+
+function getStorefrontUrl(): string {
+  return `https://${getShopifyStoreDomain()}/api/${SHOPIFY_API_VERSION}/graphql.json`;
+}
 
 /** Token público Headless — só no cliente (sacola/checkout). */
 export const SHOPIFY_STOREFRONT_PUBLIC_TOKEN =
@@ -21,7 +42,7 @@ function getStorefrontAuthHeaders(): Record<string, string> | null {
     };
   }
   const publicToken = SHOPIFY_STOREFRONT_PUBLIC_TOKEN?.trim();
-  if (publicToken) {
+  if (publicToken && !isAdminApiToken(publicToken)) {
     return {
       'Content-Type': 'application/json',
       'X-Shopify-Storefront-Access-Token': publicToken,
@@ -67,7 +88,7 @@ export async function storefrontApiRequest(query: string, variables: Record<stri
   if (!headers) {
     return null;
   }
-  const response = await fetch(SHOPIFY_STOREFRONT_URL, {
+  const response = await fetch(getStorefrontUrl(), {
     method: 'POST',
     headers,
     body: JSON.stringify({ query, variables }),

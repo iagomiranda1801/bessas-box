@@ -6,7 +6,7 @@ function getAdminConfig() {
   const store =
     process.env.SHOPIFY_STORE_DOMAIN ??
     process.env.VITE_SHOPIFY_STORE_DOMAIN ??
-    "iwqyh2-ky.myshopify.com";
+    "uvhyj5-ty.myshopify.com";
   const token = process.env.SHOPIFY_ADMIN_ACCESS_TOKEN ?? "";
   return {
     store,

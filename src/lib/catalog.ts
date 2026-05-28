@@ -1,52 +1,36 @@
+import type { ShopifyProduct } from "@/lib/shopify";
 import {
-  fetchProducts,
-  fetchProductByHandle,
-  hasStorefrontToken,
-  type ShopifyProduct,
-} from "@/lib/shopify";
-import {
-  fetchProductsAdmin,
-  fetchProductByHandleAdmin,
-  hasAdminApiToken,
-} from "@/lib/shopify-admin";
+  catalogProductByHandleFn,
+  catalogProductsFn,
+  fetchProductByHandleServer,
+  fetchProductsServer,
+} from "@/lib/catalog.server";
 
 const isServer = typeof window === "undefined";
 
-/** Catálogo: Storefront (privado no SSR, público no cliente) ou Admin API como fallback. */
+/** Catálogo: SSR direto no servidor; no navegador usa server function (token privado). */
 export async function fetchProductsForStore(first = 24): Promise<ShopifyProduct[]> {
-  if (hasStorefrontToken()) {
-    try {
-      return await fetchProducts(first);
-    } catch (error) {
-      console.error("Storefront catalog failed:", error);
-    }
+  if (isServer) {
+    return fetchProductsServer(first);
   }
-  if (isServer && hasAdminApiToken()) {
-    try {
-      return await fetchProductsAdmin(first);
-    } catch (error) {
-      console.error("Admin API catalog failed:", error);
-    }
+  try {
+    return await catalogProductsFn({ data: { first } });
+  } catch (error) {
+    console.error("Catalog RPC failed:", error);
+    return [];
   }
-  return [];
 }
 
 export async function fetchProductByHandleForStore(
   handle: string,
 ): Promise<ShopifyProduct | null> {
-  if (hasStorefrontToken()) {
-    try {
-      return await fetchProductByHandle(handle);
-    } catch (error) {
-      console.error("Storefront product failed:", error);
-    }
+  if (isServer) {
+    return fetchProductByHandleServer(handle);
   }
-  if (isServer && hasAdminApiToken()) {
-    try {
-      return await fetchProductByHandleAdmin(handle);
-    } catch (error) {
-      console.error("Admin API product failed:", error);
-    }
+  try {
+    return await catalogProductByHandleFn({ data: { handle } });
+  } catch (error) {
+    console.error("Product RPC failed:", error);
+    return null;
   }
-  return null;
 }

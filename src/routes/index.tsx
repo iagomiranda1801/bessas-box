@@ -5,10 +5,12 @@ import { Gem, Truck, ShieldCheck, ArrowRight } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { SiteHeader } from "@/components/SiteHeader";
 import { SiteFooter } from "@/components/SiteFooter";
+import { HomePartnersSection } from "@/components/HomePartnersSection";
 import { HeroSlider, type HeroSlide } from "@/components/HeroSlider";
 import heroVerm from "@/assets/verm.jpeg";
 import heroPreto from "@/assets/preto.jpeg";
 import heroBessa from "@/assets/bessa-hero.jpg";
+import { PARTNERS } from "@/lib/partners";
 
 const HERO_SLIDES: HeroSlide[] = [
   {
@@ -139,9 +141,11 @@ function Index() {
           </div>
         </section>
 
+        <HomePartnersSection />
+
         <section className="py-16 sm:py-20">
           <div className="max-w-7xl mx-auto px-4 sm:px-6">
-            <div className="grid sm:grid-cols-2 gap-4">
+            <div className="grid sm:grid-cols-2 lg:grid-cols-3 gap-4">
               <Link
                 to="/destaques"
                 className="group premium-card rounded-xl p-8 sm:p-10 flex flex-col justify-between min-h-[200px] animate-fade-in-up"
@@ -172,6 +176,38 @@ function Index() {
                 </div>
                 <span className="inline-flex items-center gap-2 text-gold text-sm font-medium mt-6 group-hover:gap-3 transition-all">
                   Ver tudo <ArrowRight className="w-4 h-4" aria-hidden="true" />
+                </span>
+              </Link>
+
+              <Link
+                to="/parcerias"
+                className="group partner-logo-frame rounded-xl p-8 sm:p-10 flex flex-col justify-between min-h-[200px] animate-fade-in-up sm:col-span-2 lg:col-span-1"
+                style={{ animationDelay: "150ms" }}
+              >
+                <div className="space-y-4">
+                  <div className="flex items-center gap-3">
+                    {PARTNERS.slice(0, 3).map((partner) => (
+                      <img
+                        key={partner.id}
+                        src={partner.logo}
+                        alt=""
+                        className="w-12 h-12 rounded-lg object-cover ring-1 ring-gold/40 group-hover:ring-gold/70 transition-all"
+                        aria-hidden="true"
+                      />
+                    ))}
+                  </div>
+                  <div className="space-y-2">
+                    <p className="text-gold text-xs tracking-[0.25em] uppercase">Parcerias</p>
+                    <h2 className="font-display text-3xl sm:text-4xl">Marcas parceiras</h2>
+                    <p className="text-muted-foreground text-sm max-w-xs">
+                      {PARTNERS[0]
+                        ? `Parceria oficial com ${PARTNERS[0].name}.`
+                        : "Conheça as marcas que caminham com a Bessa's Box."}
+                    </p>
+                  </div>
+                </div>
+                <span className="inline-flex items-center gap-2 text-gold text-sm font-medium mt-6 group-hover:gap-3 transition-all">
+                  Ver parcerias <ArrowRight className="w-4 h-4" aria-hidden="true" />
                 </span>
               </Link>
             </div>

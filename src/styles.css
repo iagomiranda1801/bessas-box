@@ -231,6 +231,18 @@
     border-color: oklch(0.78 0.14 85 / 0.5);
     box-shadow: 0 12px 40px -16px oklch(0.78 0.14 85 / 0.25);
   }
+
+  .partner-logo-frame {
+    border: 1px solid oklch(0.78 0.14 85 / 0.25);
+    background: linear-gradient(135deg, oklch(0.12 0.01 80 / 0.92), oklch(0.09 0.01 80 / 0.92));
+    transition: border-color 0.3s ease, box-shadow 0.3s ease, transform 0.3s ease;
+  }
+
+  .partner-logo-frame:hover {
+    border-color: oklch(0.78 0.14 85 / 0.5);
+    box-shadow: 0 10px 30px -18px oklch(0.78 0.14 85 / 0.4);
+    transform: translateY(-1px);
+  }
 }
 
 @keyframes fade-in {
