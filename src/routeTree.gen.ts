@@ -16,6 +16,8 @@ import { Route as AdminRouteImport } from './routes/admin'
 import { Route as IndexRouteImport } from './routes/index'
 import { Route as AdminIndexRouteImport } from './routes/admin.index'
 import { Route as ProductHandleRouteImport } from './routes/product.$handle'
+import { Route as ContaPerfilRouteImport } from './routes/conta.perfil'
+import { Route as ContaPedidosRouteImport } from './routes/conta.pedidos'
 import { Route as ContaEntrarRouteImport } from './routes/conta.entrar'
 import { Route as ContaCadastroRouteImport } from './routes/conta.cadastro'
 import { Route as CheckoutPendingRouteImport } from './routes/checkout.pending'
@@ -25,6 +27,7 @@ import { Route as AdminLoginRouteImport } from './routes/admin.login'
 import { Route as AdminEstoqueRouteImport } from './routes/admin.estoque'
 import { Route as AdminConfiguracoesRouteImport } from './routes/admin.configuracoes'
 import { Route as AdminClientesRouteImport } from './routes/admin.clientes'
+import { Route as ContaPedidosIdRouteImport } from './routes/conta.pedidos.$id'
 import { Route as ApiWebhooksPaymentRouteImport } from './routes/api/webhooks/payment'
 import { Route as AdminProdutosNovoRouteImport } from './routes/admin.produtos.novo'
 import { Route as AdminProdutosIdRouteImport } from './routes/admin.produtos.$id'
@@ -64,6 +67,16 @@ const AdminIndexRoute = AdminIndexRouteImport.update({
 const ProductHandleRoute = ProductHandleRouteImport.update({
   id: '/product/$handle',
   path: '/product/$handle',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const ContaPerfilRoute = ContaPerfilRouteImport.update({
+  id: '/conta/perfil',
+  path: '/conta/perfil',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const ContaPedidosRoute = ContaPedidosRouteImport.update({
+  id: '/conta/pedidos',
+  path: '/conta/pedidos',
   getParentRoute: () => rootRouteImport,
 } as any)
 const ContaEntrarRoute = ContaEntrarRouteImport.update({
@@ -111,6 +124,11 @@ const AdminClientesRoute = AdminClientesRouteImport.update({
   path: '/clientes',
   getParentRoute: () => AdminRoute,
 } as any)
+const ContaPedidosIdRoute = ContaPedidosIdRouteImport.update({
+  id: '/$id',
+  path: '/$id',
+  getParentRoute: () => ContaPedidosRoute,
+} as any)
 const ApiWebhooksPaymentRoute = ApiWebhooksPaymentRouteImport.update({
   id: '/api/webhooks/payment',
   path: '/api/webhooks/payment',
@@ -152,6 +170,8 @@ export interface FileRoutesByFullPath {
   '/checkout/pending': typeof CheckoutPendingRoute
   '/conta/cadastro': typeof ContaCadastroRoute
   '/conta/entrar': typeof ContaEntrarRoute
+  '/conta/pedidos': typeof ContaPedidosRouteWithChildren
+  '/conta/perfil': typeof ContaPerfilRoute
   '/product/$handle': typeof ProductHandleRoute
   '/admin/': typeof AdminIndexRoute
   '/admin/clientes/$id': typeof AdminClientesIdRoute
@@ -159,6 +179,7 @@ export interface FileRoutesByFullPath {
   '/admin/produtos/$id': typeof AdminProdutosIdRoute
   '/admin/produtos/novo': typeof AdminProdutosNovoRoute
   '/api/webhooks/payment': typeof ApiWebhooksPaymentRoute
+  '/conta/pedidos/$id': typeof ContaPedidosIdRoute
 }
 export interface FileRoutesByTo {
   '/': typeof IndexRoute
@@ -174,6 +195,8 @@ export interface FileRoutesByTo {
   '/checkout/pending': typeof CheckoutPendingRoute
   '/conta/cadastro': typeof ContaCadastroRoute
   '/conta/entrar': typeof ContaEntrarRoute
+  '/conta/pedidos': typeof ContaPedidosRouteWithChildren
+  '/conta/perfil': typeof ContaPerfilRoute
   '/product/$handle': typeof ProductHandleRoute
   '/admin': typeof AdminIndexRoute
   '/admin/clientes/$id': typeof AdminClientesIdRoute
@@ -181,6 +204,7 @@ export interface FileRoutesByTo {
   '/admin/produtos/$id': typeof AdminProdutosIdRoute
   '/admin/produtos/novo': typeof AdminProdutosNovoRoute
   '/api/webhooks/payment': typeof ApiWebhooksPaymentRoute
+  '/conta/pedidos/$id': typeof ContaPedidosIdRoute
 }
 export interface FileRoutesById {
   __root__: typeof rootRouteImport
@@ -198,6 +222,8 @@ export interface FileRoutesById {
   '/checkout/pending': typeof CheckoutPendingRoute
   '/conta/cadastro': typeof ContaCadastroRoute
   '/conta/entrar': typeof ContaEntrarRoute
+  '/conta/pedidos': typeof ContaPedidosRouteWithChildren
+  '/conta/perfil': typeof ContaPerfilRoute
   '/product/$handle': typeof ProductHandleRoute
   '/admin/': typeof AdminIndexRoute
   '/admin/clientes/$id': typeof AdminClientesIdRoute
@@ -205,6 +231,7 @@ export interface FileRoutesById {
   '/admin/produtos/$id': typeof AdminProdutosIdRoute
   '/admin/produtos/novo': typeof AdminProdutosNovoRoute
   '/api/webhooks/payment': typeof ApiWebhooksPaymentRoute
+  '/conta/pedidos/$id': typeof ContaPedidosIdRoute
 }
 export interface FileRouteTypes {
   fileRoutesByFullPath: FileRoutesByFullPath
@@ -223,6 +250,8 @@ export interface FileRouteTypes {
     | '/checkout/pending'
     | '/conta/cadastro'
     | '/conta/entrar'
+    | '/conta/pedidos'
+    | '/conta/perfil'
     | '/product/$handle'
     | '/admin/'
     | '/admin/clientes/$id'
@@ -230,6 +259,7 @@ export interface FileRouteTypes {
     | '/admin/produtos/$id'
     | '/admin/produtos/novo'
     | '/api/webhooks/payment'
+    | '/conta/pedidos/$id'
   fileRoutesByTo: FileRoutesByTo
   to:
     | '/'
@@ -245,6 +275,8 @@ export interface FileRouteTypes {
     | '/checkout/pending'
     | '/conta/cadastro'
     | '/conta/entrar'
+    | '/conta/pedidos'
+    | '/conta/perfil'
     | '/product/$handle'
     | '/admin'
     | '/admin/clientes/$id'
@@ -252,6 +284,7 @@ export interface FileRouteTypes {
     | '/admin/produtos/$id'
     | '/admin/produtos/novo'
     | '/api/webhooks/payment'
+    | '/conta/pedidos/$id'
   id:
     | '__root__'
     | '/'
@@ -268,6 +301,8 @@ export interface FileRouteTypes {
     | '/checkout/pending'
     | '/conta/cadastro'
     | '/conta/entrar'
+    | '/conta/pedidos'
+    | '/conta/perfil'
     | '/product/$handle'
     | '/admin/'
     | '/admin/clientes/$id'
@@ -275,6 +310,7 @@ export interface FileRouteTypes {
     | '/admin/produtos/$id'
     | '/admin/produtos/novo'
     | '/api/webhooks/payment'
+    | '/conta/pedidos/$id'
   fileRoutesById: FileRoutesById
 }
 export interface RootRouteChildren {
@@ -286,6 +322,8 @@ export interface RootRouteChildren {
   CheckoutPendingRoute: typeof CheckoutPendingRoute
   ContaCadastroRoute: typeof ContaCadastroRoute
   ContaEntrarRoute: typeof ContaEntrarRoute
+  ContaPedidosRoute: typeof ContaPedidosRouteWithChildren
+  ContaPerfilRoute: typeof ContaPerfilRoute
   ProductHandleRoute: typeof ProductHandleRoute
   ApiWebhooksPaymentRoute: typeof ApiWebhooksPaymentRoute
 }
@@ -339,6 +377,20 @@ declare module '@tanstack/react-router' {
       path: '/product/$handle'
       fullPath: '/product/$handle'
       preLoaderRoute: typeof ProductHandleRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/conta/perfil': {
+      id: '/conta/perfil'
+      path: '/conta/perfil'
+      fullPath: '/conta/perfil'
+      preLoaderRoute: typeof ContaPerfilRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/conta/pedidos': {
+      id: '/conta/pedidos'
+      path: '/conta/pedidos'
+      fullPath: '/conta/pedidos'
+      preLoaderRoute: typeof ContaPedidosRouteImport
       parentRoute: typeof rootRouteImport
     }
     '/conta/entrar': {
@@ -403,6 +455,13 @@ declare module '@tanstack/react-router' {
       fullPath: '/admin/clientes'
       preLoaderRoute: typeof AdminClientesRouteImport
       parentRoute: typeof AdminRoute
+    }
+    '/conta/pedidos/$id': {
+      id: '/conta/pedidos/$id'
+      path: '/$id'
+      fullPath: '/conta/pedidos/$id'
+      preLoaderRoute: typeof ContaPedidosIdRouteImport
+      parentRoute: typeof ContaPedidosRoute
     }
     '/api/webhooks/payment': {
       id: '/api/webhooks/payment'
@@ -502,6 +561,18 @@ const AdminRouteChildren: AdminRouteChildren = {
 
 const AdminRouteWithChildren = AdminRoute._addFileChildren(AdminRouteChildren)
 
+interface ContaPedidosRouteChildren {
+  ContaPedidosIdRoute: typeof ContaPedidosIdRoute
+}
+
+const ContaPedidosRouteChildren: ContaPedidosRouteChildren = {
+  ContaPedidosIdRoute: ContaPedidosIdRoute,
+}
+
+const ContaPedidosRouteWithChildren = ContaPedidosRoute._addFileChildren(
+  ContaPedidosRouteChildren,
+)
+
 const rootRouteChildren: RootRouteChildren = {
   IndexRoute: IndexRoute,
   AdminRoute: AdminRouteWithChildren,
@@ -511,6 +582,8 @@ const rootRouteChildren: RootRouteChildren = {
   CheckoutPendingRoute: CheckoutPendingRoute,
   ContaCadastroRoute: ContaCadastroRoute,
   ContaEntrarRoute: ContaEntrarRoute,
+  ContaPedidosRoute: ContaPedidosRouteWithChildren,
+  ContaPerfilRoute: ContaPerfilRoute,
   ProductHandleRoute: ProductHandleRoute,
   ApiWebhooksPaymentRoute: ApiWebhooksPaymentRoute,
 }

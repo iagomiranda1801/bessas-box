@@ -41,3 +41,43 @@ create index if not exists order_status_history_order_id_idx
 alter table public.order_status_history enable row level security;
 
 -- Histórico só via service_role (admin) — sem policy pública
+
+-- Cliente vê pedidos pela conta ou pelo mesmo e-mail do checkout
+drop policy if exists "Cliente ve seus pedidos" on public.orders;
+create policy "Cliente ve seus pedidos"
+  on public.orders for select
+  using (
+    auth.uid() = user_id
+    or lower(customer_email) = lower(coalesce(auth.jwt() ->> 'email', ''))
+  );
+
+drop policy if exists "Cliente ve itens dos seus pedidos" on public.order_items;
+create policy "Cliente ve itens dos seus pedidos"
+  on public.order_items for select
+  using (
+    exists (
+      select 1 from public.orders o
+      where o.id = order_id
+        and (
+          o.user_id = auth.uid()
+          or lower(o.customer_email) = lower(coalesce(auth.jwt() ->> 'email', ''))
+        )
+    )
+  );
+
+drop policy if exists "Cliente ve historico dos seus pedidos" on public.order_status_history;
+create policy "Cliente ve historico dos seus pedidos"
+  on public.order_status_history for select
+  using (
+    exists (
+      select 1 from public.orders o
+      where o.id = order_id
+        and (
+          o.user_id = auth.uid()
+          or lower(o.customer_email) = lower(coalesce(auth.jwt() ->> 'email', ''))
+        )
+    )
+  );
+
+-- Recarrega cache do PostgREST (evita "column not in schema cache" após ALTER)
+notify pgrst, 'reload schema';

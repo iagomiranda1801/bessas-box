@@ -180,7 +180,7 @@ export function SupabaseCartDrawer() {
               />
               <div className="flex justify-between text-sm">
                 <span className="text-muted-foreground">Total</span>
-                <span className="text-gold font-medium">{formatCents(totalCents())}</span>
+                <span className="text-gold font-medium">{formatCents(totalCents)}</span>
               </div>
               <Button
                 className="w-full bg-gold text-onyx hover:bg-gold-soft"

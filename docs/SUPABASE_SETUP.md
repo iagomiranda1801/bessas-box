@@ -14,6 +14,8 @@ Guia para banco, **painel admin**, login e bucket de imagens.
 
    - Clique **Run and enable RLS** se aparecer o aviso.
 
+   - **Já rodou `schema.sql` antes?** Rode de novo o arquivo inteiro **ou** só [`supabase/migrations/admin_orders.sql`](../supabase/migrations/admin_orders.sql) — o checkout precisa das colunas `shipping_name`, `shipping_address`, etc. e da tabela `order_status_history`.
+
 2. **SQL Editor** → rodar [`supabase/storage_product_images.sql`](../supabase/storage_product_images.sql)  
 
    - Cria o bucket **`product-images`** (público para leitura).
@@ -94,7 +96,10 @@ URL discreta — **não** aparece no menu da loja. Guia completo: [`docs/ADMIN.m
 
 ### Migrations extras (pedidos + histórico)
 
-Após `schema.sql`, rode [`supabase/migrations/admin_orders.sql`](../supabase/migrations/admin_orders.sql).
+Após `schema.sql`, rode:
+
+- [`supabase/migrations/profiles.sql`](../supabase/migrations/profiles.sql) — perfil do cliente (`/conta/perfil`)
+- [`supabase/migrations/admin_orders.sql`](../supabase/migrations/admin_orders.sql) — pedidos e checkout
 
 ### Acesso
 
@@ -130,11 +135,11 @@ Upload vai para **Storage → product-images → `{slug}/...`** e grava em **`pr
 
 
 
-### Sacola / checkout (fase atual)
+### Sacola / checkout
 
 
 
-Catálogo e PDP leem **Supabase**. Sacola e checkout **continuam Shopify** — adicionar produto Supabase à sacola ainda não está integrado ao checkout.
+Catálogo, sacola e checkout usam **Supabase**. Se aparecer erro de coluna (`shipping_address`, `order_status_history`), execute [`supabase/migrations/admin_orders.sql`](../supabase/migrations/admin_orders.sql) no SQL Editor.
 
 
 
@@ -253,6 +258,8 @@ values (
 
 
 - [ ] `schema.sql` executado (com RLS)
+- [ ] `migrations/admin_orders.sql` executado (obrigatório para checkout / admin de pedidos)
+- [ ] `migrations/profiles.sql` executado (obrigatório para `/conta/perfil`)
 
 - [ ] `storage_product_images.sql` → bucket **product-images**
 

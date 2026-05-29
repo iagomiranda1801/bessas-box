@@ -198,12 +198,12 @@ export function ProductCard({ product, featured = false, className }: ProductCar
           <Button
             onClick={() => selectedVariant && addVariantToCart(selectedVariant)}
             disabled={
-              (pendingVariantId != null && pendingVariantId === selectedVariant?.id) ||
+              (addingVariantId != null && addingVariantId === selectedVariant?.id) ||
               !selectedVariant?.availableForSale
             }
             className="w-full bg-gold text-onyx hover:bg-gold-soft font-medium tracking-wide"
           >
-            {pendingVariantId === selectedVariant?.id ? (
+            {addingVariantId === selectedVariant?.id ? (
               <Loader2 className="w-4 h-4 animate-spin" aria-hidden="true" />
             ) : (
               "Adicionar à Sacola"

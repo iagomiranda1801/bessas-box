@@ -123,6 +123,15 @@ export function SiteHeader({ homeOnlyNav = true }: SiteHeaderProps) {
           {navItems.map((item) => renderNavItem(item, "relative py-1"))}
           {isLoggedIn && customerEmail ? (
             <div className="flex items-center gap-3 ml-2 pl-3 border-l border-gold/20">
+              <Link
+                to="/conta/perfil"
+                className={cn(
+                  "text-xs tracking-wide transition-colors",
+                  pathname.startsWith("/conta") ? "text-gold" : "text-muted-foreground hover:text-gold",
+                )}
+              >
+                Minha conta
+              </Link>
               <span className="text-xs text-muted-foreground max-w-[120px] truncate" title={customerEmail}>
                 {truncateEmail(customerEmail, 18)}
               </span>
@@ -181,6 +190,13 @@ export function SiteHeader({ homeOnlyNav = true }: SiteHeaderProps) {
                 {navItems.map((item) => renderNavItem(item, "text-lg font-medium tracking-wide py-3 px-2 rounded-md hover:bg-gold/5"))}
                 {isLoggedIn && customerEmail ? (
                   <div className="mt-4 pt-4 border-t border-gold/15 px-2 space-y-2">
+                    <Link
+                      to="/conta/perfil"
+                      onClick={closeMenu}
+                      className="text-lg font-medium tracking-wide py-2 block hover:text-gold transition-colors"
+                    >
+                      Minha conta
+                    </Link>
                     <p className="text-sm text-muted-foreground truncate">{customerEmail}</p>
                     <button
                       type="button"

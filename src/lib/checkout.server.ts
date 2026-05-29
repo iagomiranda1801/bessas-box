@@ -19,6 +19,45 @@ const createOrderSchema = z.object({
   shippingAddress: z.record(z.unknown()).optional(),
 });
 
+const SCHEMA_COLUMN_ERROR = /schema cache|could not find the '[^']+' column/i;
+
+type OrderInsert = Record<string, unknown>;
+
+function buildOrderInsertAttempts(
+  data: z.infer<typeof createOrderSchema>,
+  totalCents: number,
+): OrderInsert[] {
+  const common = {
+    user_id: data.userId ?? null,
+    customer_email: data.customerEmail,
+    total_cents: totalCents,
+    payment_provider: getPaymentProvider(),
+  };
+
+  const withShipping: OrderInsert = {
+    ...common,
+    status: 'awaiting_payment',
+    shipping_name: data.shippingName,
+    shipping_phone: data.shippingPhone ?? null,
+  };
+
+  const hasAddress =
+    data.shippingAddress != null && Object.keys(data.shippingAddress).length > 0;
+
+  const attempts: OrderInsert[] = hasAddress
+    ? [{ ...withShipping, shipping_address: data.shippingAddress }]
+    : [];
+  attempts.push(withShipping, { ...common, status: 'pending' });
+
+  return attempts;
+}
+
+function schemaMigrationHint(message: string) {
+  return SCHEMA_COLUMN_ERROR.test(message)
+    ? ' Rode no Supabase → SQL Editor o arquivo supabase/migrations/admin_orders.sql e depois Settings → API → Reload schema cache.'
+    : '';
+}
+
 export const createSupabaseOrderFn = createServerFn({ method: 'POST' })
   .inputValidator(createOrderSchema)
   .handler(async ({ data }) => {
@@ -63,28 +102,38 @@ export const createSupabaseOrderFn = createServerFn({ method: 'POST' })
       });
     }
 
-    const { data: order, error: orderError } = await client
-      .from('orders')
-      .insert({
-        user_id: data.userId ?? null,
-        customer_email: data.customerEmail,
-        status: 'awaiting_payment' satisfies OrderStatus,
-        total_cents: totalCents,
-        shipping_name: data.shippingName,
-        shipping_phone: data.shippingPhone ?? null,
-        shipping_address: data.shippingAddress ?? null,
-        payment_provider: getPaymentProvider(),
-      })
-      .select('*')
-      .single();
+    const insertAttempts = buildOrderInsertAttempts(data, totalCents);
+    let order: Record<string, unknown> | null = null;
+    let orderError: { message: string } | null = null;
+    let usedLegacySchema = false;
 
-    if (orderError || !order) {
-      return { ok: false as const, message: orderError?.message ?? 'Erro ao criar pedido.' };
+    for (let i = 0; i < insertAttempts.length; i++) {
+      const payload = insertAttempts[i]!;
+      const result = await client.from('orders').insert(payload).select('*').single();
+      if (!result.error && result.data) {
+        order = result.data as Record<string, unknown>;
+        usedLegacySchema = i === insertAttempts.length - 1;
+        break;
+      }
+      orderError = result.error;
+      if (result.error && !SCHEMA_COLUMN_ERROR.test(result.error.message)) break;
+    }
+
+    if (!order) {
+      const msg = orderError?.message ?? 'Erro ao criar pedido.';
+      return { ok: false as const, message: msg + schemaMigrationHint(msg) };
+    }
+
+    if (usedLegacySchema && lineItems[0]) {
+      lineItems[0] = {
+        ...lineItems[0],
+        product_title: `[Entrega: ${data.shippingName}] ${lineItems[0].product_title}`,
+      };
     }
 
     const { error: itemsError } = await client.from('order_items').insert(
       lineItems.map((li) => ({
-        order_id: order.id,
+        order_id: order.id as string,
         ...li,
       })),
     );
@@ -105,19 +154,30 @@ export const createSupabaseOrderFn = createServerFn({ method: 'POST' })
         .eq('id', item.productId);
     }
 
-    await client.from('order_status_history').insert({
+    const orderStatus = (order.status as OrderStatus) ?? 'pending';
+    const { error: historyError } = await client.from('order_status_history').insert({
       order_id: order.id,
-      status: 'awaiting_payment',
+      status: orderStatus,
       changed_by: 'checkout',
     });
+    if (historyError && SCHEMA_COLUMN_ERROR.test(historyError.message)) {
+      console.warn('[checkout] order_status_history ausente — rode admin_orders.sql');
+    }
 
     const provider = getPaymentProviderInstance();
-    const charge = await provider.createCharge(order);
+    const charge = await provider.createCharge(order as import('@/lib/order-types').OrderRow);
 
-    await client
+    const paymentUpdate = { payment_id: charge.paymentId, updated_at: new Date().toISOString() };
+    const { error: paymentUpdateError } = await client
       .from('orders')
-      .update({ payment_id: charge.paymentId, updated_at: new Date().toISOString() })
-      .eq('id', order.id);
+      .update(paymentUpdate)
+      .eq('id', order.id as string);
+    if (paymentUpdateError?.message?.includes('updated_at')) {
+      await client
+        .from('orders')
+        .update({ payment_id: charge.paymentId })
+        .eq('id', order.id as string);
+    }
 
     return {
       ok: true as const,
