@@ -6,7 +6,24 @@ const CART_CHECKOUT_QUERY = `
   query cartCheckout($id: ID!) {
     cart(id: $id) {
       id
+      totalQuantity
       checkoutUrl
+      lines(first: 100) {
+        edges {
+          node {
+            quantity
+            merchandise {
+              ... on ProductVariant {
+                id
+                title
+                availableForSale
+                quantityAvailable
+                product { title }
+              }
+            }
+          }
+        }
+      }
     }
   }
 `;
@@ -68,6 +85,38 @@ export type CartServerResult =
   | { ok: true; cartId: string; checkoutUrl: string; lineId: string }
   | { ok: false; message: string; cartNotFound?: boolean };
 
+export type UnavailableLine = {
+  title: string;
+  reason: string;
+};
+
+export type CheckoutUrlResult =
+  | { ok: true; checkoutUrl: string }
+  | {
+      ok: false;
+      message: string;
+      unavailableLines?: UnavailableLine[];
+      cartNotFound?: boolean;
+    };
+
+type CartLineNode = {
+  quantity: number;
+  merchandise: {
+    id: string;
+    title: string;
+    availableForSale: boolean;
+    quantityAvailable: number | null;
+    product: { title: string };
+  };
+};
+
+type CartCheckoutPayload = {
+  id: string;
+  totalQuantity: number;
+  checkoutUrl: string | null;
+  lines: { edges: Array<{ node: CartLineNode }> };
+};
+
 function formatCheckoutUrl(checkoutUrl: string): string {
   try {
     const url = new URL(checkoutUrl);
@@ -92,6 +141,91 @@ function isCartNotFoundError(userErrors: Array<{ message: string }>) {
 
 function noTokenResult(): CartServerResult {
   return { ok: false, message: 'Não foi possível atualizar a sacola. Tente novamente.' };
+}
+
+function noTokenCheckoutResult(): CheckoutUrlResult {
+  return { ok: false, message: 'Não foi possível abrir o pagamento. Tente novamente.' };
+}
+
+function lineDisplayTitle(line: CartLineNode): string {
+  const productTitle = line.merchandise.product?.title;
+  if (productTitle && line.merchandise.title && line.merchandise.title !== 'Default Title') {
+    return `${productTitle} (${line.merchandise.title})`;
+  }
+  return productTitle || line.merchandise.title || 'Produto';
+}
+
+function validateCartLines(cart: CartCheckoutPayload): UnavailableLine[] {
+  const issues: UnavailableLine[] = [];
+
+  for (const { node: line } of cart.lines.edges) {
+    const title = lineDisplayTitle(line);
+    const { availableForSale, quantityAvailable } = line.merchandise;
+
+    if (!availableForSale) {
+      issues.push({
+        title,
+        reason: 'indisponível para venda no momento',
+      });
+      continue;
+    }
+
+    if (quantityAvailable != null) {
+      if (quantityAvailable === 0) {
+        issues.push({ title, reason: 'esgotado' });
+      } else if (line.quantity > quantityAvailable) {
+        issues.push({
+          title,
+          reason:
+            quantityAvailable === 1
+              ? 'só há 1 unidade em estoque'
+              : `só há ${quantityAvailable} unidades em estoque`,
+        });
+      }
+    }
+  }
+
+  return issues;
+}
+
+export async function serverValidateCartForCheckout(cartId: string): Promise<CheckoutUrlResult> {
+  const data = await storefrontApiRequest(CART_CHECKOUT_QUERY, { id: cartId });
+  if (!data) return noTokenCheckoutResult();
+
+  const cart = data.data?.cart as CartCheckoutPayload | null | undefined;
+  if (!cart?.id) {
+    return {
+      ok: false,
+      message: 'Sacola expirada — adicione os produtos novamente.',
+      cartNotFound: true,
+    };
+  }
+
+  if (!cart.totalQuantity || cart.totalQuantity < 1 || !cart.lines?.edges?.length) {
+    return {
+      ok: false,
+      message: 'Sua sacola está vazia. Adicione produtos antes de finalizar.',
+      cartNotFound: true,
+    };
+  }
+
+  const unavailableLines = validateCartLines(cart);
+  if (unavailableLines.length > 0) {
+    const message = unavailableLines
+      .map((l) => `${l.title}: ${l.reason}`)
+      .join('. ');
+    return { ok: false, message, unavailableLines };
+  }
+
+  if (!cart.checkoutUrl) {
+    return {
+      ok: false,
+      message: 'Carrinho inválido ou expirado. Adicione o produto à sacola novamente.',
+      cartNotFound: true,
+    };
+  }
+
+  return { ok: true, checkoutUrl: formatCheckoutUrl(cart.checkoutUrl) };
 }
 
 export async function serverCartCreate(
@@ -204,21 +338,7 @@ export async function serverCartExists(cartId: string): Promise<boolean> {
   return Boolean(cart && cart.totalQuantity > 0);
 }
 
-export type CheckoutUrlResult =
-  | { ok: true; checkoutUrl: string }
-  | { ok: false; message: string };
-
+/** @deprecated Use serverValidateCartForCheckout */
 export async function serverGetCartCheckoutUrl(cartId: string): Promise<CheckoutUrlResult> {
-  const data = await storefrontApiRequest(CART_CHECKOUT_QUERY, { id: cartId });
-  if (!data) return noTokenResult();
-
-  const cart = data.data?.cart;
-  if (!cart?.checkoutUrl) {
-    return {
-      ok: false,
-      message: 'Carrinho inválido ou expirado. Adicione o produto à sacola novamente.',
-    };
-  }
-
-  return { ok: true, checkoutUrl: formatCheckoutUrl(cart.checkoutUrl) };
+  return serverValidateCartForCheckout(cartId);
 }

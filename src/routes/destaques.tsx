@@ -8,8 +8,10 @@ const FEATURED_COUNT = 4;
 export const Route = createFileRoute("/destaques")({
   loader: async () => {
     try {
-      const products = await fetchProductsForStore(24);
-      return { products: products.slice(0, FEATURED_COUNT) };
+      const products = await fetchProductsForStore(FEATURED_COUNT, {
+        featuredOnly: true,
+      });
+      return { products };
     } catch (error) {
       console.error("Destaques loader failed:", error);
       return { products: [] as ShopifyProduct[] };

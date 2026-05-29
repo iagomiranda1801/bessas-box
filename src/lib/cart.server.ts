@@ -4,7 +4,6 @@ import {
   serverCartAddLine,
   serverCartCreate,
   serverCartExists,
-  serverGetCartCheckoutUrl,
   serverCartRemoveLine,
   serverCartUpdateLine,
 } from '@/lib/shopify-cart';
@@ -61,7 +60,3 @@ export const cartSyncFn = createServerFn({ method: 'POST' })
     const exists = await serverCartExists(data.cartId);
     return { exists };
   });
-
-export const cartCheckoutFn = createServerFn({ method: 'POST' })
-  .inputValidator(cartIdSchema)
-  .handler(async ({ data }) => serverGetCartCheckoutUrl(data.cartId));

@@ -3,7 +3,8 @@ import { Link, useRouterState } from "@tanstack/react-router";
 import { Menu } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Sheet, SheetContent, SheetHeader, SheetTitle, SheetTrigger } from "@/components/ui/sheet";
-import { CartDrawer } from "@/components/CartDrawer";
+import { StoreCartDrawer } from "@/components/StoreCartDrawer";
+import { useCustomerStore, truncateEmail } from "@/stores/customerStore";
 import { cn } from "@/lib/utils";
 import logo from "@/assets/bessa-logo.png";
 
@@ -38,6 +39,9 @@ export function SiteHeader({ homeOnlyNav = true }: SiteHeaderProps) {
   const [scrolled, setScrolled] = useState(false);
   const pathname = useRouterState({ select: (s) => s.location.pathname });
   const isHome = pathname === "/";
+  const customerEmail = useCustomerStore((s) => s.email);
+  const isLoggedIn = useCustomerStore((s) => s.isLoggedIn());
+  const logout = useCustomerStore((s) => s.logout);
 
   const navItems: Array<{ href: string; label: string; active: boolean; isRoute: boolean; to?: string }> =
     NAV_LINKS.map((link) => ({
@@ -117,6 +121,30 @@ export function SiteHeader({ homeOnlyNav = true }: SiteHeaderProps) {
             </Link>
           )}
           {navItems.map((item) => renderNavItem(item, "relative py-1"))}
+          {isLoggedIn && customerEmail ? (
+            <div className="flex items-center gap-3 ml-2 pl-3 border-l border-gold/20">
+              <span className="text-xs text-muted-foreground max-w-[120px] truncate" title={customerEmail}>
+                {truncateEmail(customerEmail, 18)}
+              </span>
+              <button
+                type="button"
+                onClick={() => logout()}
+                className="text-xs text-gold hover:text-gold-soft tracking-wide"
+              >
+                Sair
+              </button>
+            </div>
+          ) : (
+            <Link
+              to="/conta/entrar"
+              className={cn(
+                "py-1 transition-colors ml-2",
+                pathname.startsWith("/conta") ? "text-gold" : "hover:text-gold",
+              )}
+            >
+              Entrar
+            </Link>
+          )}
         </nav>
 
         <div className="flex items-center gap-2">
@@ -151,10 +179,33 @@ export function SiteHeader({ homeOnlyNav = true }: SiteHeaderProps) {
                   </Link>
                 )}
                 {navItems.map((item) => renderNavItem(item, "text-lg font-medium tracking-wide py-3 px-2 rounded-md hover:bg-gold/5"))}
+                {isLoggedIn && customerEmail ? (
+                  <div className="mt-4 pt-4 border-t border-gold/15 px-2 space-y-2">
+                    <p className="text-sm text-muted-foreground truncate">{customerEmail}</p>
+                    <button
+                      type="button"
+                      onClick={() => {
+                        logout();
+                        closeMenu();
+                      }}
+                      className="text-sm text-gold hover:text-gold-soft"
+                    >
+                      Sair da conta
+                    </button>
+                  </div>
+                ) : (
+                  <Link
+                    to="/conta/entrar"
+                    onClick={closeMenu}
+                    className="text-lg font-medium tracking-wide py-3 px-2 rounded-md hover:text-gold hover:bg-gold/5 transition-colors block mt-2 border-t border-gold/15"
+                  >
+                    Entrar
+                  </Link>
+                )}
               </nav>
             </SheetContent>
           </Sheet>
-          <CartDrawer />
+          <StoreCartDrawer />
         </div>
       </div>
     </header>

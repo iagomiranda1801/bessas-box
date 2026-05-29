@@ -15,6 +15,9 @@ import {
   cartUpdateLineFn,
 } from '@/lib/cart.server';
 
+const CLIENT_STORE_DOMAIN =
+  import.meta.env.VITE_SHOPIFY_STORE_DOMAIN ?? 'uvhyj5-ty.myshopify.com';
+
 export interface CartItem {
   lineId: string | null;
   product: ShopifyProduct;
@@ -23,6 +26,7 @@ export interface CartItem {
   price: { amount: string; currencyCode: string };
   quantity: number;
   quantityAvailable: number | null;
+  availableForSale: boolean;
   selectedOptions: Array<{ name: string; value: string }>;
 }
 
@@ -38,15 +42,16 @@ interface CartStore {
   items: CartItem[];
   cartId: string | null;
   checkoutUrl: string | null;
-  isLoading: boolean;
+  storeDomain: string;
+  pendingVariantId: string | null;
   isSyncing: boolean;
-  addItem: (item: Omit<CartItem, 'lineId'>) => Promise<AddItemResult>;
+  addItem: (item: Omit<CartItem, 'lineId' | 'availableForSale'>) => Promise<AddItemResult>;
   updateQuantity: (variantId: string, quantity: number) => Promise<UpdateQuantityResult>;
   removeItem: (variantId: string) => Promise<boolean>;
   clearCart: () => void;
   syncCart: () => Promise<void>;
   getCheckoutUrl: () => string | null;
-  getMaxForVariant: (variantId: string) => number | null;
+  getMaxForVariant: (variantId: string) => number;
 }
 
 const ADD_ITEM_ERROR = 'Não foi possível adicionar à sacola. Tente novamente.';
@@ -64,22 +69,27 @@ async function resolveVariantStock(
   return fallback;
 }
 
+function stockFromCartItem(item: CartItem) {
+  return {
+    availableForSale: item.availableForSale,
+    quantityAvailable: item.quantityAvailable,
+  };
+}
+
 export const useCartStore = create<CartStore>()(
   persist(
     (set, get) => ({
       items: [],
       cartId: null,
       checkoutUrl: null,
-      isLoading: false,
+      storeDomain: CLIENT_STORE_DOMAIN,
+      pendingVariantId: null,
       isSyncing: false,
 
       getMaxForVariant: (variantId) => {
         const item = get().items.find((i) => i.variantId === variantId);
-        if (!item) return null;
-        return getMaxPurchasableQuantity({
-          availableForSale: true,
-          quantityAvailable: item.quantityAvailable,
-        });
+        if (!item) return 0;
+        return getMaxPurchasableQuantity(stockFromCartItem(item));
       },
 
       addItem: async (item) => {
@@ -89,7 +99,7 @@ export const useCartStore = create<CartStore>()(
           (e) => e.node.id === item.variantId,
         )?.node;
         const stock = await resolveVariantStock(item.variantId, {
-          availableForSale: variantNode?.availableForSale ?? true,
+          availableForSale: variantNode?.availableForSale ?? false,
           quantityAvailable:
             variantNode?.quantityAvailable ?? item.quantityAvailable ?? null,
         });
@@ -106,7 +116,7 @@ export const useCartStore = create<CartStore>()(
           return {
             ok: false,
             message:
-              max != null && alreadyInCart > 0
+              alreadyInCart > 0
                 ? stockMessageForAdd(max, alreadyInCart)
                 : validation.message,
           };
@@ -115,9 +125,10 @@ export const useCartStore = create<CartStore>()(
         const itemWithStock: Omit<CartItem, 'lineId'> = {
           ...item,
           quantityAvailable: stock.quantityAvailable,
+          availableForSale: stock.availableForSale,
         };
 
-        set({ isLoading: true });
+        set({ pendingVariantId: item.variantId });
         try {
           if (!cartId) {
             const result = await cartCreateFn({
@@ -131,6 +142,7 @@ export const useCartStore = create<CartStore>()(
               });
               return { ok: true };
             }
+            if (result.cartNotFound) clearCart();
             return { ok: false, message: result.message || ADD_ITEM_ERROR };
           }
 
@@ -150,7 +162,12 @@ export const useCartStore = create<CartStore>()(
               set({
                 items: items.map((i) =>
                   i.variantId === item.variantId
-                    ? { ...i, quantity: newQuantity, quantityAvailable: stock.quantityAvailable }
+                    ? {
+                        ...i,
+                        quantity: newQuantity,
+                        quantityAvailable: stock.quantityAvailable,
+                        availableForSale: stock.availableForSale,
+                      }
                     : i,
                 ),
               });
@@ -179,7 +196,7 @@ export const useCartStore = create<CartStore>()(
           console.error('Failed to add item:', error);
           return { ok: false, message: ADD_ITEM_ERROR };
         } finally {
-          set({ isLoading: false });
+          set({ pendingVariantId: null });
         }
       },
 
@@ -195,17 +212,14 @@ export const useCartStore = create<CartStore>()(
           return { ok: false, message: ADD_ITEM_ERROR };
         }
 
-        const stock = await resolveVariantStock(variantId, {
-          availableForSale: true,
-          quantityAvailable: item.quantityAvailable,
-        });
+        const stock = await resolveVariantStock(variantId, stockFromCartItem(item));
         const max = getMaxPurchasableQuantity(stock);
         const validation = validateRequestedQuantity(quantity, max);
         if (!validation.ok) {
           return { ok: false, message: validation.message };
         }
 
-        set({ isLoading: true });
+        set({ pendingVariantId: variantId });
         try {
           const result = await cartUpdateLineFn({
             data: { cartId, lineId: item.lineId, quantity },
@@ -214,7 +228,12 @@ export const useCartStore = create<CartStore>()(
             set({
               items: items.map((i) =>
                 i.variantId === variantId
-                  ? { ...i, quantity, quantityAvailable: stock.quantityAvailable }
+                  ? {
+                      ...i,
+                      quantity,
+                      quantityAvailable: stock.quantityAvailable,
+                      availableForSale: stock.availableForSale,
+                    }
                   : i,
               ),
             });
@@ -226,7 +245,7 @@ export const useCartStore = create<CartStore>()(
           console.error('Failed to update quantity:', error);
           return { ok: false, message: ADD_ITEM_ERROR };
         } finally {
-          set({ isLoading: false });
+          set({ pendingVariantId: null });
         }
       },
 
@@ -234,7 +253,7 @@ export const useCartStore = create<CartStore>()(
         const { items, cartId, clearCart } = get();
         const item = items.find((i) => i.variantId === variantId);
         if (!item?.lineId || !cartId) return false;
-        set({ isLoading: true });
+        set({ pendingVariantId: variantId });
         try {
           const result = await cartRemoveLineFn({
             data: { cartId, lineId: item.lineId },
@@ -251,11 +270,18 @@ export const useCartStore = create<CartStore>()(
           console.error('Failed to remove item:', error);
           return false;
         } finally {
-          set({ isLoading: false });
+          set({ pendingVariantId: null });
         }
       },
 
-      clearCart: () => set({ items: [], cartId: null, checkoutUrl: null }),
+      clearCart: () =>
+        set({
+          items: [],
+          cartId: null,
+          checkoutUrl: null,
+          pendingVariantId: null,
+          storeDomain: CLIENT_STORE_DOMAIN,
+        }),
       getCheckoutUrl: () => get().checkoutUrl,
 
       syncCart: async () => {
@@ -273,20 +299,18 @@ export const useCartStore = create<CartStore>()(
           let changed = false;
           for (let i = 0; i < nextItems.length; i++) {
             const cartItem = nextItems[i];
-            const stock = await resolveVariantStock(cartItem.variantId, {
-              availableForSale: true,
-              quantityAvailable: cartItem.quantityAvailable,
-            });
+            const stock = await resolveVariantStock(cartItem.variantId, stockFromCartItem(cartItem));
             const max = getMaxPurchasableQuantity(stock);
             if (max === 0) {
               clearCart();
               return;
             }
-            if (max != null && cartItem.quantity > max) {
+            if (cartItem.quantity > max) {
               nextItems[i] = {
                 ...cartItem,
                 quantity: max,
                 quantityAvailable: stock.quantityAvailable,
+                availableForSale: stock.availableForSale,
               };
               changed = true;
               if (cartItem.lineId) {
@@ -294,8 +318,15 @@ export const useCartStore = create<CartStore>()(
                   data: { cartId, lineId: cartItem.lineId, quantity: max },
                 });
               }
-            } else if (stock.quantityAvailable !== cartItem.quantityAvailable) {
-              nextItems[i] = { ...cartItem, quantityAvailable: stock.quantityAvailable };
+            } else if (
+              stock.quantityAvailable !== cartItem.quantityAvailable ||
+              stock.availableForSale !== cartItem.availableForSale
+            ) {
+              nextItems[i] = {
+                ...cartItem,
+                quantityAvailable: stock.quantityAvailable,
+                availableForSale: stock.availableForSale,
+              };
               changed = true;
             }
           }
@@ -314,7 +345,33 @@ export const useCartStore = create<CartStore>()(
         items: state.items,
         cartId: state.cartId,
         checkoutUrl: state.checkoutUrl,
+        storeDomain: state.storeDomain,
       }),
+      merge: (persisted, current) => {
+        const persistedState = persisted as Partial<CartStore> | undefined;
+        if (
+          persistedState?.storeDomain &&
+          persistedState.storeDomain !== CLIENT_STORE_DOMAIN
+        ) {
+          return {
+            ...current,
+            items: [],
+            cartId: null,
+            checkoutUrl: null,
+            storeDomain: CLIENT_STORE_DOMAIN,
+          };
+        }
+        const items = (persistedState?.items ?? []).map((item) => ({
+          ...item,
+          availableForSale: item.availableForSale ?? true,
+        }));
+        return {
+          ...current,
+          ...persistedState,
+          items,
+          storeDomain: persistedState?.storeDomain ?? CLIENT_STORE_DOMAIN,
+        };
+      },
     },
   ),
 );

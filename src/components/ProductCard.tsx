@@ -10,6 +10,8 @@ import {
 } from "@/components/ui/dialog";
 import { Loader2, Plus, Sparkles } from "lucide-react";
 import { useCartStore } from "@/stores/cartStore";
+import { useSupabaseCartStore, parseSupabaseVariantId } from "@/stores/supabaseCartStore";
+import { isSupabaseCart } from "@/lib/cart-config";
 import type { ShopifyProduct } from "@/lib/shopify";
 import { toast } from "sonner";
 import { cn } from "@/lib/utils";
@@ -22,8 +24,12 @@ type ProductCardProps = {
 
 export function ProductCard({ product, featured = false, className }: ProductCardProps) {
   const addItem = useCartStore((state) => state.addItem);
-  const isLoading = useCartStore((state) => state.isLoading);
+  const supabaseAddItem = useSupabaseCartStore((state) => state.addItem);
+  const pendingVariantId = useCartStore((state) => state.pendingVariantId);
   const variants = product.node.variants.edges.map((e) => e.node);
+  const variantIds = variants.map((v) => v.id);
+  const isAddingThisProduct =
+    pendingVariantId != null && variantIds.includes(pendingVariantId);
   const singleVariant = variants.length === 1 ? variants[0] : null;
   const image = product.node.images.edges[0]?.node;
   const price = product.node.priceRange.minVariantPrice;
@@ -41,6 +47,27 @@ export function ProductCard({ product, featured = false, className }: ProductCar
       toast.error("Esta variação está esgotada");
       return;
     }
+
+    if (isSupabaseCart()) {
+      const productId = parseSupabaseVariantId(variant.id) ?? product.node.id;
+      const priceCents = Math.round(parseFloat(variant.price.amount) * 100);
+      const result = supabaseAddItem({
+        productId,
+        slug: product.node.handle,
+        title: product.node.title,
+        priceCents,
+        imageUrl: product.node.images.edges[0]?.node.url ?? null,
+        stockQuantity: variant.quantityAvailable ?? 99,
+      });
+      if (result.ok) {
+        toast.success("Adicionado à sacola", { position: "top-center" });
+        setVariantDialogOpen(false);
+      } else {
+        toast.error(result.message ?? "Erro ao adicionar", { position: "top-center" });
+      }
+      return;
+    }
+
     const result = await addItem({
       product,
       variantId: variant.id,
@@ -146,7 +173,9 @@ export function ProductCard({ product, featured = false, className }: ProductCar
           <Button
             size="icon"
             onClick={handleQuickAdd}
-            disabled={isLoading || (!hasMultipleVariants && !canQuickAddSingle)}
+            disabled={
+              isAddingThisProduct || (!hasMultipleVariants && !canQuickAddSingle)
+            }
             className={cn(
               "shrink-0 bg-gold text-onyx hover:bg-gold-soft transition-transform group-hover:scale-105",
               featured ? "h-11 w-11" : "h-9 w-9",
@@ -157,7 +186,7 @@ export function ProductCard({ product, featured = false, className }: ProductCar
                 : `Adicionar ${product.node.title} à sacola`
             }
           >
-            {isLoading ? (
+            {isAddingThisProduct ? (
               <Loader2 className="w-4 h-4 animate-spin" aria-hidden="true" />
             ) : (
               <Plus className="w-4 h-4" aria-hidden="true" />
@@ -195,10 +224,13 @@ export function ProductCard({ product, featured = false, className }: ProductCar
           </div>
           <Button
             onClick={() => selectedVariant && addVariantToCart(selectedVariant)}
-            disabled={isLoading || !selectedVariant?.availableForSale}
+            disabled={
+              (pendingVariantId != null && pendingVariantId === selectedVariant?.id) ||
+              !selectedVariant?.availableForSale
+            }
             className="w-full bg-gold text-onyx hover:bg-gold-soft font-medium tracking-wide"
           >
-            {isLoading ? (
+            {pendingVariantId === selectedVariant?.id ? (
               <Loader2 className="w-4 h-4 animate-spin" aria-hidden="true" />
             ) : (
               "Adicionar à Sacola"

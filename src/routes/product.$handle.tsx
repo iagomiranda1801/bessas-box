@@ -43,7 +43,7 @@ export const Route = createFileRoute("/product/$handle")({
 function ProductPage() {
   const { product } = Route.useLoaderData();
   const addItem = useCartStore((s) => s.addItem);
-  const isLoading = useCartStore((s) => s.isLoading);
+  const pendingVariantId = useCartStore((s) => s.pendingVariantId);
   const [selectedVariantId, setSelectedVariantId] = useState<string | null>(null);
   const [selectedImageIndex, setSelectedImageIndex] = useState(0);
 
@@ -185,11 +185,14 @@ function ProductPage() {
             <div className="space-y-3 pt-2">
               <Button
                 onClick={handleAdd}
-                disabled={isLoading || !selectedVariant?.availableForSale}
+                disabled={
+                  pendingVariantId === selectedVariant?.id ||
+                  !selectedVariant?.availableForSale
+                }
                 size="lg"
                 className="w-full bg-gold text-onyx hover:bg-gold-soft font-medium tracking-wide h-14 text-base shadow-gold"
               >
-                {isLoading ? (
+                {pendingVariantId === selectedVariant?.id ? (
                   <Loader2 className="w-5 h-5 animate-spin" aria-hidden="true" />
                 ) : (
                   <>

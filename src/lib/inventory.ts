@@ -3,10 +3,13 @@ export type VariantStock = {
   quantityAvailable: number | null;
 };
 
-/** Limite vendável; `null` = estoque não informado pela API (só `availableForSale`). */
-export function getMaxPurchasableQuantity(variant: VariantStock): number | null {
+/**
+ * Limite vendável.
+ * Se a API não informar quantidade (`null`), assume no máximo 1 unidade (conservador).
+ */
+export function getMaxPurchasableQuantity(variant: VariantStock): number {
   if (!variant.availableForSale) return 0;
-  if (variant.quantityAvailable == null) return null;
+  if (variant.quantityAvailable == null) return 1;
   return Math.max(0, variant.quantityAvailable);
 }
 
@@ -33,12 +36,11 @@ export function stockMessageForQuantity(max: number): string {
 
 export function validateRequestedQuantity(
   requestedTotal: number,
-  max: number | null,
+  max: number,
 ): { ok: true } | { ok: false; message: string; cappedQuantity: number } {
   if (requestedTotal < 1) {
     return { ok: false, message: 'Quantidade inválida.', cappedQuantity: 0 };
   }
-  if (max === null) return { ok: true };
   if (requestedTotal <= max) return { ok: true };
   return {
     ok: false,
