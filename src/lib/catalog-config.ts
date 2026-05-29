@@ -1,15 +1,7 @@
-export type CatalogSource = 'supabase' | 'shopify';
+export type CatalogSource = 'supabase';
 
 export function getCatalogSource(): CatalogSource {
-  const explicit = process.env.CATALOG_SOURCE?.trim().toLowerCase();
-  if (explicit === 'shopify') return 'shopify';
-  if (explicit === 'supabase') return 'supabase';
-
-  const url =
-    (typeof import.meta !== 'undefined' && import.meta.env?.VITE_SUPABASE_URL) ||
-    process.env.VITE_SUPABASE_URL ||
-    '';
-  return url ? 'supabase' : 'shopify';
+  return 'supabase';
 }
 
 export function getAdminEmails(): string[] {
@@ -30,18 +22,11 @@ export function slugifyTitle(title: string): string {
     .slice(0, 80);
 }
 
-export type CartSource = 'supabase' | 'shopify';
+export type CartSource = 'supabase';
 export type PaymentProviderName = 'mercadopago' | 'asaas';
 
 export function getCartSource(): CartSource {
-  const explicit =
-    process.env.CART_SOURCE?.trim().toLowerCase() ??
-    (typeof import.meta !== 'undefined' && import.meta.env?.VITE_CART_SOURCE
-      ? String(import.meta.env.VITE_CART_SOURCE).toLowerCase()
-      : undefined);
-  if (explicit === 'shopify') return 'shopify';
-  if (explicit === 'supabase') return 'supabase';
-  return getCatalogSource() === 'supabase' ? 'supabase' : 'shopify';
+  return 'supabase';
 }
 
 export function getPaymentProvider(): PaymentProviderName {

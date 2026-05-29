@@ -77,11 +77,4 @@ export const useSupabaseCartStore = create<SupabaseCartStore>()(
   ),
 );
 
-export function supabaseVariantId(productId: string): string {
-  return `supabase-variant-${productId}`;
-}
-
-export function parseSupabaseVariantId(variantId: string): string | null {
-  if (!variantId.startsWith('supabase-variant-')) return null;
-  return variantId.replace('supabase-variant-', '');
-}
+export { parseSupabaseVariantId, supabaseVariantId } from '@/lib/supabase-cart';

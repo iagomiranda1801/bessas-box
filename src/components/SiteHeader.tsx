@@ -3,7 +3,7 @@ import { Link, useRouterState } from "@tanstack/react-router";
 import { Menu } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Sheet, SheetContent, SheetHeader, SheetTitle, SheetTrigger } from "@/components/ui/sheet";
-import { StoreCartDrawer } from "@/components/StoreCartDrawer";
+import { SupabaseCartDrawer } from "@/components/SupabaseCartDrawer";
 import { useCustomerStore, truncateEmail } from "@/stores/customerStore";
 import { cn } from "@/lib/utils";
 import logo from "@/assets/bessa-logo.png";
@@ -205,7 +205,7 @@ export function SiteHeader({ homeOnlyNav = true }: SiteHeaderProps) {
               </nav>
             </SheetContent>
           </Sheet>
-          <StoreCartDrawer />
+          <SupabaseCartDrawer />
         </div>
       </div>
     </header>

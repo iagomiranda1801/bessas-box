@@ -58,8 +58,7 @@ function LoginPage() {
               <p className="text-gold text-xs tracking-[0.25em] uppercase">Conta</p>
               <h1 className="font-display text-3xl sm:text-4xl">Entrar</h1>
               <p className="text-sm text-muted-foreground">
-                Acesse sua conta para agilizar próximas compras. Cadastro não é obrigatório para
-                pagar.
+                Acesse sua conta para agilizar compras e ver pedidos. Cadastro não é obrigatório.
               </p>
             </div>
 

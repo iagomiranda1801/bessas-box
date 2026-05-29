@@ -1,83 +1,28 @@
 import { createServerFn } from '@tanstack/react-start';
 import { z } from 'zod';
-import { getCatalogSource } from '@/lib/catalog-config';
 import { storeProductsToShopifyShape } from '@/lib/catalog-adapter';
 import {
   fetchProductBySlugFromSupabase,
   fetchProductsFromSupabase,
 } from '@/lib/supabase-catalog';
-import {
-  fetchProducts,
-  fetchProductByHandle,
-  hasStorefrontToken,
-  type ShopifyProduct,
-} from '@/lib/shopify';
-import {
-  fetchProductsAdmin,
-  fetchProductByHandleAdmin,
-  hasAdminApiToken,
-} from '@/lib/shopify-admin';
-
-async function fetchShopifyProductsServer(first = 24): Promise<ShopifyProduct[]> {
-  if (hasStorefrontToken()) {
-    try {
-      return await fetchProducts(first);
-    } catch (error) {
-      console.error('Storefront catalog failed:', error);
-    }
-  }
-  if (hasAdminApiToken()) {
-    try {
-      return await fetchProductsAdmin(first);
-    } catch (error) {
-      console.error('Admin API catalog failed:', error);
-    }
-  }
-  return [];
-}
-
-async function fetchShopifyProductByHandleServer(handle: string): Promise<ShopifyProduct | null> {
-  if (hasStorefrontToken()) {
-    try {
-      return await fetchProductByHandle(handle);
-    } catch (error) {
-      console.error('Storefront product failed:', error);
-    }
-  }
-  if (hasAdminApiToken()) {
-    try {
-      return await fetchProductByHandleAdmin(handle);
-    } catch (error) {
-      console.error('Admin API product failed:', error);
-    }
-  }
-  return null;
-}
+import type { ShopifyProduct } from '@/lib/shopify';
 
 export async function fetchProductsServer(
   first = 24,
   options?: { featuredOnly?: boolean },
 ): Promise<ShopifyProduct[]> {
-  if (getCatalogSource() === 'supabase') {
-    const products = await fetchProductsFromSupabase({
-      limit: first,
-      featuredOnly: options?.featuredOnly,
-    });
-    return storeProductsToShopifyShape(products);
-  }
-  const all = await fetchShopifyProductsServer(first);
-  if (options?.featuredOnly) return all.slice(0, Math.min(4, all.length));
-  return all;
+  const products = await fetchProductsFromSupabase({
+    limit: first,
+    featuredOnly: options?.featuredOnly,
+  });
+  return storeProductsToShopifyShape(products);
 }
 
 export async function fetchProductByHandleServer(
   handle: string,
 ): Promise<ShopifyProduct | null> {
-  if (getCatalogSource() === 'supabase') {
-    const product = await fetchProductBySlugFromSupabase(handle);
-    return product ? storeProductsToShopifyShape([product])[0] : null;
-  }
-  return fetchShopifyProductByHandleServer(handle);
+  const product = await fetchProductBySlugFromSupabase(handle);
+  return product ? storeProductsToShopifyShape([product])[0] : null;
 }
 
 const firstSchema = z.object({

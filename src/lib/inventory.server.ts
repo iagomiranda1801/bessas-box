@@ -1,28 +1,26 @@
 import { createServerFn } from '@tanstack/react-start';
 import { z } from 'zod';
-import { storefrontApiRequest } from '@/lib/shopify';
 import type { VariantStock } from '@/lib/inventory';
-
-const VARIANT_INVENTORY_QUERY = `
-  query VariantInventory($id: ID!) {
-    node(id: $id) {
-      ... on ProductVariant {
-        id
-        availableForSale
-        quantityAvailable
-      }
-    }
-  }
-`;
+import { parseSupabaseVariantId } from '@/lib/supabase-cart';
+import { getSupabaseAnonServerClient } from '@/lib/supabase-server';
 
 export async function fetchVariantStock(variantId: string): Promise<VariantStock | null> {
-  const data = await storefrontApiRequest(VARIANT_INVENTORY_QUERY, { id: variantId });
-  const node = data?.data?.node;
-  if (!node?.id) return null;
+  const productId = parseSupabaseVariantId(variantId);
+  if (!productId) return null;
+
+  const client = getSupabaseAnonServerClient();
+  const { data, error } = await client
+    .from('products')
+    .select('stock_quantity, is_active')
+    .eq('id', productId)
+    .eq('is_active', true)
+    .maybeSingle();
+
+  if (error || !data) return null;
+
   return {
-    availableForSale: Boolean(node.availableForSale),
-    quantityAvailable:
-      typeof node.quantityAvailable === 'number' ? node.quantityAvailable : null,
+    availableForSale: data.stock_quantity > 0,
+    quantityAvailable: data.stock_quantity,
   };
 }
 

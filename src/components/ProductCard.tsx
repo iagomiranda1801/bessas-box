@@ -9,9 +9,7 @@ import {
   DialogTitle,
 } from "@/components/ui/dialog";
 import { Loader2, Plus, Sparkles } from "lucide-react";
-import { useCartStore } from "@/stores/cartStore";
-import { useSupabaseCartStore, parseSupabaseVariantId } from "@/stores/supabaseCartStore";
-import { isSupabaseCart } from "@/lib/cart-config";
+import { addProductToSupabaseCart } from "@/lib/supabase-cart";
 import type { ShopifyProduct } from "@/lib/shopify";
 import { toast } from "sonner";
 import { cn } from "@/lib/utils";
@@ -23,13 +21,11 @@ type ProductCardProps = {
 };
 
 export function ProductCard({ product, featured = false, className }: ProductCardProps) {
-  const addItem = useCartStore((state) => state.addItem);
-  const supabaseAddItem = useSupabaseCartStore((state) => state.addItem);
-  const pendingVariantId = useCartStore((state) => state.pendingVariantId);
+  const [addingVariantId, setAddingVariantId] = useState<string | null>(null);
   const variants = product.node.variants.edges.map((e) => e.node);
   const variantIds = variants.map((v) => v.id);
   const isAddingThisProduct =
-    pendingVariantId != null && variantIds.includes(pendingVariantId);
+    addingVariantId != null && variantIds.includes(addingVariantId);
   const singleVariant = variants.length === 1 ? variants[0] : null;
   const image = product.node.images.edges[0]?.node;
   const price = product.node.priceRange.minVariantPrice;
@@ -48,40 +44,17 @@ export function ProductCard({ product, featured = false, className }: ProductCar
       return;
     }
 
-    if (isSupabaseCart()) {
-      const productId = parseSupabaseVariantId(variant.id) ?? product.node.id;
-      const priceCents = Math.round(parseFloat(variant.price.amount) * 100);
-      const result = supabaseAddItem({
-        productId,
-        slug: product.node.handle,
-        title: product.node.title,
-        priceCents,
-        imageUrl: product.node.images.edges[0]?.node.url ?? null,
-        stockQuantity: variant.quantityAvailable ?? 99,
-      });
+    setAddingVariantId(variant.id);
+    try {
+      const result = addProductToSupabaseCart(product, variant);
       if (result.ok) {
         toast.success("Adicionado à sacola", { position: "top-center" });
         setVariantDialogOpen(false);
       } else {
         toast.error(result.message ?? "Erro ao adicionar", { position: "top-center" });
       }
-      return;
-    }
-
-    const result = await addItem({
-      product,
-      variantId: variant.id,
-      variantTitle: variant.title,
-      price: variant.price,
-      quantity: 1,
-      quantityAvailable: variant.quantityAvailable ?? null,
-      selectedOptions: variant.selectedOptions || [],
-    });
-    if (result.ok) {
-      toast.success("Adicionado à sacola", { position: "top-center" });
-      setVariantDialogOpen(false);
-    } else {
-      toast.error(result.message, { position: "top-center" });
+    } finally {
+      setAddingVariantId(null);
     }
   };
 

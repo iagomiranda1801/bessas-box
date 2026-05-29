@@ -18,7 +18,7 @@ import { cn } from "@/lib/utils";
 
 const loginSchema = z.object({
   email: z.string().email("E-mail inválido"),
-  password: z.string().min(5, "A senha deve ter pelo menos 5 caracteres"),
+  password: z.string().min(6, "A senha deve ter pelo menos 6 caracteres"),
 });
 
 const registerSchema = loginSchema.extend({
@@ -114,7 +114,7 @@ export function CustomerAuthForm({ mode, onSubmit, className }: CustomerAuthForm
                   type="password"
                   autoComplete={isRegister ? "new-password" : "current-password"}
                   className="border-gold/30 bg-background/80 focus-visible:ring-gold"
-                  placeholder="Mínimo 5 caracteres"
+                  placeholder="Mínimo 6 caracteres"
                 />
               </FormControl>
               <FormMessage />

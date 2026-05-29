@@ -5,7 +5,7 @@ import { Button } from "@/components/ui/button";
 import { SiteHeader } from "@/components/SiteHeader";
 import { SiteFooter } from "@/components/SiteFooter";
 import { fetchProductByHandleForStore } from "@/lib/catalog";
-import { useCartStore } from "@/stores/cartStore";
+import { addProductToSupabaseCart } from "@/lib/supabase-cart";
 import { toast } from "sonner";
 import { cn } from "@/lib/utils";
 
@@ -42,8 +42,7 @@ export const Route = createFileRoute("/product/$handle")({
 
 function ProductPage() {
   const { product } = Route.useLoaderData();
-  const addItem = useCartStore((s) => s.addItem);
-  const pendingVariantId = useCartStore((s) => s.pendingVariantId);
+  const [adding, setAdding] = useState(false);
   const [selectedVariantId, setSelectedVariantId] = useState<string | null>(null);
   const [selectedImageIndex, setSelectedImageIndex] = useState(0);
 
@@ -56,19 +55,16 @@ function ProductPage() {
 
   const handleAdd = async () => {
     if (!selectedVariant) return;
-    const result = await addItem({
-      product,
-      variantId: selectedVariant.id,
-      variantTitle: selectedVariant.title,
-      price: selectedVariant.price,
-      quantity: 1,
-      quantityAvailable: selectedVariant.quantityAvailable ?? null,
-      selectedOptions: selectedVariant.selectedOptions || [],
-    });
-    if (result.ok) {
-      toast.success("Adicionado à sacola", { position: "top-center" });
-    } else {
-      toast.error(result.message, { position: "top-center" });
+    setAdding(true);
+    try {
+      const result = addProductToSupabaseCart(product, selectedVariant);
+      if (result.ok) {
+        toast.success("Adicionado à sacola", { position: "top-center" });
+      } else {
+        toast.error(result.message, { position: "top-center" });
+      }
+    } finally {
+      setAdding(false);
     }
   };
 
@@ -185,14 +181,11 @@ function ProductPage() {
             <div className="space-y-3 pt-2">
               <Button
                 onClick={handleAdd}
-                disabled={
-                  pendingVariantId === selectedVariant?.id ||
-                  !selectedVariant?.availableForSale
-                }
+                disabled={adding || !selectedVariant?.availableForSale}
                 size="lg"
                 className="w-full bg-gold text-onyx hover:bg-gold-soft font-medium tracking-wide h-14 text-base shadow-gold"
               >
-                {pendingVariantId === selectedVariant?.id ? (
+                {adding ? (
                   <Loader2 className="w-5 h-5 animate-spin" aria-hidden="true" />
                 ) : (
                   <>

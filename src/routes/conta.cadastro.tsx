@@ -47,9 +47,16 @@ function RegisterPage() {
       toast.error(result.message, { position: "top-center" });
       return;
     }
-    setSession(result.session);
-    toast.success("Conta criada com sucesso!", { position: "top-center" });
-    navigate({ to: returnTo || "/colecao" });
+    if ("needsConfirmation" in result && result.needsConfirmation) {
+      toast.success(result.message, { position: "top-center", duration: 8000 });
+      navigate({ to: "/conta/entrar", search: returnTo ? { returnTo } : undefined });
+      return;
+    }
+    if ("session" in result && result.session) {
+      setSession(result.session);
+      toast.success("Conta criada com sucesso!", { position: "top-center" });
+      navigate({ to: returnTo || "/colecao" });
+    }
   };
 
   return (
@@ -70,7 +77,8 @@ function RegisterPage() {
               <p className="text-gold text-xs tracking-[0.25em] uppercase">Conta</p>
               <h1 className="font-display text-3xl sm:text-4xl">Criar conta</h1>
               <p className="text-sm text-muted-foreground">
-                Cadastro opcional — você também pode comprar como convidado e pagar na Shopify.
+                Cadastro com e-mail e senha (Supabase). Você também pode comprar como convidado na
+                sacola.
               </p>
             </div>
 

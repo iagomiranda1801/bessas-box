@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import { Link } from '@tanstack/react-router';
 import { ExternalLink, Loader2, Minus, Plus, ShoppingBag, Trash2 } from 'lucide-react';
 import { toast } from 'sonner';
@@ -15,6 +15,7 @@ import {
 import { createSupabaseOrderFn } from '@/lib/checkout.server';
 import { formatCents } from '@/lib/admin-utils';
 import { useSupabaseCartStore } from '@/stores/supabaseCartStore';
+import { useCustomerStore } from '@/stores/customerStore';
 
 export function SupabaseCartDrawer() {
   const [isOpen, setIsOpen] = useState(false);
@@ -26,6 +27,16 @@ export function SupabaseCartDrawer() {
   const removeItem = useSupabaseCartStore((s) => s.removeItem);
   const clearCart = useSupabaseCartStore((s) => s.clearCart);
   const totalCents = useSupabaseCartStore((s) => s.totalCents());
+
+  const customerEmail = useCustomerStore((s) => s.email);
+  const customerUserId = useCustomerStore((s) => s.userId);
+  const isLoggedIn = useCustomerStore((s) => s.isLoggedIn());
+
+  useEffect(() => {
+    if (isLoggedIn && customerEmail) {
+      setEmail(customerEmail);
+    }
+  }, [isLoggedIn, customerEmail]);
 
   const totalItems = items.reduce((sum, i) => sum + i.quantity, 0);
 
@@ -48,6 +59,7 @@ export function SupabaseCartDrawer() {
         data: {
           customerEmail: trimmedEmail,
           shippingName: name,
+          userId: isLoggedIn && customerUserId ? customerUserId : undefined,
           items: items.map((i) => ({ productId: i.productId, quantity: i.quantity })),
         },
       });
