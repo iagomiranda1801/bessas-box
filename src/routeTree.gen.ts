@@ -27,6 +27,8 @@ import { Route as AdminLoginRouteImport } from './routes/admin.login'
 import { Route as AdminEstoqueRouteImport } from './routes/admin.estoque'
 import { Route as AdminConfiguracoesRouteImport } from './routes/admin.configuracoes'
 import { Route as AdminClientesRouteImport } from './routes/admin.clientes'
+import { Route as AdminProdutosIndexRouteImport } from './routes/admin.produtos.index'
+import { Route as AdminPedidosIndexRouteImport } from './routes/admin.pedidos.index'
 import { Route as ContaPedidosIdRouteImport } from './routes/conta.pedidos.$id'
 import { Route as ApiWebhooksPaymentRouteImport } from './routes/api/webhooks/payment'
 import { Route as AdminProdutosNovoRouteImport } from './routes/admin.produtos.novo'
@@ -124,6 +126,16 @@ const AdminClientesRoute = AdminClientesRouteImport.update({
   path: '/clientes',
   getParentRoute: () => AdminRoute,
 } as any)
+const AdminProdutosIndexRoute = AdminProdutosIndexRouteImport.update({
+  id: '/',
+  path: '/',
+  getParentRoute: () => AdminProdutosRoute,
+} as any)
+const AdminPedidosIndexRoute = AdminPedidosIndexRouteImport.update({
+  id: '/',
+  path: '/',
+  getParentRoute: () => AdminPedidosRoute,
+} as any)
 const ContaPedidosIdRoute = ContaPedidosIdRouteImport.update({
   id: '/$id',
   path: '/$id',
@@ -180,6 +192,8 @@ export interface FileRoutesByFullPath {
   '/admin/produtos/novo': typeof AdminProdutosNovoRoute
   '/api/webhooks/payment': typeof ApiWebhooksPaymentRoute
   '/conta/pedidos/$id': typeof ContaPedidosIdRoute
+  '/admin/pedidos/': typeof AdminPedidosIndexRoute
+  '/admin/produtos/': typeof AdminProdutosIndexRoute
 }
 export interface FileRoutesByTo {
   '/': typeof IndexRoute
@@ -190,8 +204,6 @@ export interface FileRoutesByTo {
   '/admin/configuracoes': typeof AdminConfiguracoesRoute
   '/admin/estoque': typeof AdminEstoqueRoute
   '/admin/login': typeof AdminLoginRoute
-  '/admin/pedidos': typeof AdminPedidosRouteWithChildren
-  '/admin/produtos': typeof AdminProdutosRouteWithChildren
   '/checkout/pending': typeof CheckoutPendingRoute
   '/conta/cadastro': typeof ContaCadastroRoute
   '/conta/entrar': typeof ContaEntrarRoute
@@ -205,6 +217,8 @@ export interface FileRoutesByTo {
   '/admin/produtos/novo': typeof AdminProdutosNovoRoute
   '/api/webhooks/payment': typeof ApiWebhooksPaymentRoute
   '/conta/pedidos/$id': typeof ContaPedidosIdRoute
+  '/admin/pedidos': typeof AdminPedidosIndexRoute
+  '/admin/produtos': typeof AdminProdutosIndexRoute
 }
 export interface FileRoutesById {
   __root__: typeof rootRouteImport
@@ -232,6 +246,8 @@ export interface FileRoutesById {
   '/admin/produtos/novo': typeof AdminProdutosNovoRoute
   '/api/webhooks/payment': typeof ApiWebhooksPaymentRoute
   '/conta/pedidos/$id': typeof ContaPedidosIdRoute
+  '/admin/pedidos/': typeof AdminPedidosIndexRoute
+  '/admin/produtos/': typeof AdminProdutosIndexRoute
 }
 export interface FileRouteTypes {
   fileRoutesByFullPath: FileRoutesByFullPath
@@ -260,6 +276,8 @@ export interface FileRouteTypes {
     | '/admin/produtos/novo'
     | '/api/webhooks/payment'
     | '/conta/pedidos/$id'
+    | '/admin/pedidos/'
+    | '/admin/produtos/'
   fileRoutesByTo: FileRoutesByTo
   to:
     | '/'
@@ -270,8 +288,6 @@ export interface FileRouteTypes {
     | '/admin/configuracoes'
     | '/admin/estoque'
     | '/admin/login'
-    | '/admin/pedidos'
-    | '/admin/produtos'
     | '/checkout/pending'
     | '/conta/cadastro'
     | '/conta/entrar'
@@ -285,6 +301,8 @@ export interface FileRouteTypes {
     | '/admin/produtos/novo'
     | '/api/webhooks/payment'
     | '/conta/pedidos/$id'
+    | '/admin/pedidos'
+    | '/admin/produtos'
   id:
     | '__root__'
     | '/'
@@ -311,6 +329,8 @@ export interface FileRouteTypes {
     | '/admin/produtos/novo'
     | '/api/webhooks/payment'
     | '/conta/pedidos/$id'
+    | '/admin/pedidos/'
+    | '/admin/produtos/'
   fileRoutesById: FileRoutesById
 }
 export interface RootRouteChildren {
@@ -456,6 +476,20 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof AdminClientesRouteImport
       parentRoute: typeof AdminRoute
     }
+    '/admin/produtos/': {
+      id: '/admin/produtos/'
+      path: '/'
+      fullPath: '/admin/produtos/'
+      preLoaderRoute: typeof AdminProdutosIndexRouteImport
+      parentRoute: typeof AdminProdutosRoute
+    }
+    '/admin/pedidos/': {
+      id: '/admin/pedidos/'
+      path: '/'
+      fullPath: '/admin/pedidos/'
+      preLoaderRoute: typeof AdminPedidosIndexRouteImport
+      parentRoute: typeof AdminPedidosRoute
+    }
     '/conta/pedidos/$id': {
       id: '/conta/pedidos/$id'
       path: '/$id'
@@ -515,10 +549,12 @@ const AdminClientesRouteWithChildren = AdminClientesRoute._addFileChildren(
 
 interface AdminPedidosRouteChildren {
   AdminPedidosIdRoute: typeof AdminPedidosIdRoute
+  AdminPedidosIndexRoute: typeof AdminPedidosIndexRoute
 }
 
 const AdminPedidosRouteChildren: AdminPedidosRouteChildren = {
   AdminPedidosIdRoute: AdminPedidosIdRoute,
+  AdminPedidosIndexRoute: AdminPedidosIndexRoute,
 }
 
 const AdminPedidosRouteWithChildren = AdminPedidosRoute._addFileChildren(
@@ -528,11 +564,13 @@ const AdminPedidosRouteWithChildren = AdminPedidosRoute._addFileChildren(
 interface AdminProdutosRouteChildren {
   AdminProdutosIdRoute: typeof AdminProdutosIdRoute
   AdminProdutosNovoRoute: typeof AdminProdutosNovoRoute
+  AdminProdutosIndexRoute: typeof AdminProdutosIndexRoute
 }
 
 const AdminProdutosRouteChildren: AdminProdutosRouteChildren = {
   AdminProdutosIdRoute: AdminProdutosIdRoute,
   AdminProdutosNovoRoute: AdminProdutosNovoRoute,
+  AdminProdutosIndexRoute: AdminProdutosIndexRoute,
 }
 
 const AdminProdutosRouteWithChildren = AdminProdutosRoute._addFileChildren(

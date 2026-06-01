@@ -9,7 +9,8 @@ const accessTokenSchema = z.object({
 
 const orderSelect = `
   *,
-  order_items (*)
+  order_items (*),
+  shipments (id, shipping_method, carrier_service, tracking_code, status, estimated_delivery_date, external_tracking_url)
 `;
 
 export type CustomerAuthResult =

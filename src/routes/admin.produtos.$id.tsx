@@ -1,6 +1,7 @@
 import { createFileRoute, Link, useNavigate } from '@tanstack/react-router';
 import { useCallback, useEffect, useState } from 'react';
 import { toast } from 'sonner';
+import { z } from 'zod';
 import { AdminLayout } from '@/components/admin/AdminLayout';
 import { ProductImagesPanel } from '@/components/admin/ProductImagesPanel';
 import {
@@ -15,6 +16,12 @@ import type { AdminProductRow } from '@/lib/catalog-types';
 import { useAdminAuthStore } from '@/stores/adminAuthStore';
 
 export const Route = createFileRoute('/admin/produtos/$id')({
+  params: {
+    parse: (params) => ({
+      id: z.string().uuid().parse(params.id),
+    }),
+    stringify: ({ id }) => ({ id }),
+  },
   component: AdminEditProductPage,
   head: () => ({
     meta: [{ title: 'Admin — Editar produto' }, { name: 'robots', content: 'noindex' }],

@@ -1,6 +1,6 @@
 import { useState, useEffect } from 'react';
 import { Link } from '@tanstack/react-router';
-import { ExternalLink, Loader2, Minus, Plus, ShoppingBag, Trash2 } from 'lucide-react';
+import { ExternalLink, Loader2, Minus, Plus, ShoppingBag, Trash2, Truck } from 'lucide-react';
 import { toast } from 'sonner';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
@@ -13,15 +13,24 @@ import {
   SheetTrigger,
 } from '@/components/ui/sheet';
 import { createSupabaseOrderFn } from '@/lib/checkout.server';
+import { calculateShippingFn } from '@/lib/shipping.server';
 import { formatCents } from '@/lib/admin-utils';
 import { useSupabaseCartStore } from '@/stores/supabaseCartStore';
 import { useCustomerStore } from '@/stores/customerStore';
+import { formatCep, validateCep } from '@/lib/shipping/cep-service';
+import type { ShippingOption, CepInfo } from '@/lib/shipping/types';
 
 export function SupabaseCartDrawer() {
   const [isOpen, setIsOpen] = useState(false);
   const [loading, setLoading] = useState(false);
   const [email, setEmail] = useState('');
   const [shippingName, setShippingName] = useState('');
+  const [shippingCep, setShippingCep] = useState('');
+  const [shippingAddress, setShippingAddress] = useState('');
+  const [shippingOptions, setShippingOptions] = useState<ShippingOption[]>([]);
+  const [selectedShipping, setSelectedShipping] = useState<ShippingOption | null>(null);
+  const [cepInfo, setCepInfo] = useState<CepInfo | null>(null);
+  const [loadingShipping, setLoadingShipping] = useState(false);
   const items = useSupabaseCartStore((s) => s.items);
   const updateQuantity = useSupabaseCartStore((s) => s.updateQuantity);
   const removeItem = useSupabaseCartStore((s) => s.removeItem);
@@ -39,16 +48,60 @@ export function SupabaseCartDrawer() {
   }, [isLoggedIn, customerEmail]);
 
   const totalItems = items.reduce((sum, i) => sum + i.quantity, 0);
+  const subtotalCents = totalCents;
+  const shippingCostCents = selectedShipping?.costCents || 0;
+  const finalTotalCents = subtotalCents + shippingCostCents;
+
+  const calculateShipping = async () => {
+    if (!validateCep(shippingCep) || items.length === 0) return;
+
+    setLoadingShipping(true);
+    try {
+      const result = await calculateShippingFn({
+        data: {
+          cep: shippingCep,
+          items: items.map(i => ({ productId: i.productId, quantity: i.quantity })),
+        },
+      });
+
+      if (!result.ok) {
+        toast.error(result.message, { position: 'top-center' });
+        return;
+      }
+
+      setCepInfo(result.cepInfo);
+      setShippingOptions(result.options);
+      setSelectedShipping(result.options[0] || null); // seleciona a mais barata
+    } catch (error) {
+      toast.error('Erro ao calcular frete', { position: 'top-center' });
+    } finally {
+      setLoadingShipping(false);
+    }
+  };
 
   const handleCheckout = async () => {
     const trimmedEmail = email.trim();
     const name = shippingName.trim();
+    const address = shippingAddress.trim();
+    
     if (!trimmedEmail || !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(trimmedEmail)) {
       toast.error('Informe um e-mail válido.', { position: 'top-center' });
       return;
     }
     if (!name) {
       toast.error('Informe o nome para entrega.', { position: 'top-center' });
+      return;
+    }
+    if (!validateCep(shippingCep)) {
+      toast.error('Informe um CEP válido.', { position: 'top-center' });
+      return;
+    }
+    if (!address) {
+      toast.error('Informe o endereço completo.', { position: 'top-center' });
+      return;
+    }
+    if (!selectedShipping) {
+      toast.error('Selecione uma opção de entrega.', { position: 'top-center' });
       return;
     }
     if (items.length === 0) return;
@@ -61,6 +114,20 @@ export function SupabaseCartDrawer() {
           shippingName: name,
           userId: isLoggedIn && customerUserId ? customerUserId : undefined,
           items: items.map((i) => ({ productId: i.productId, quantity: i.quantity })),
+          shippingCep: formatCep(shippingCep),
+          shippingCity: cepInfo?.city,
+          shippingState: cepInfo?.state,
+          isLocalDelivery: selectedShipping.isLocal,
+          shippingCostCents: selectedShipping.costCents,
+          shippingMethod: selectedShipping.method,
+          carrierService: selectedShipping.carrierService,
+          shippingAddress: {
+            street: address,
+            neighborhood: cepInfo?.neighborhood,
+            cep: formatCep(shippingCep),
+            city: cepInfo?.city,
+            state: cepInfo?.state,
+          },
         },
       });
       if (!result.ok) {
@@ -178,9 +245,96 @@ export function SupabaseCartDrawer() {
                 onChange={(e) => setShippingName(e.target.value)}
                 className="border-gold/30"
               />
-              <div className="flex justify-between text-sm">
-                <span className="text-muted-foreground">Total</span>
-                <span className="text-gold font-medium">{formatCents(totalCents)}</span>
+              <div className="flex gap-2">
+                <Input
+                  placeholder="CEP (ex: 38400-100)"
+                  value={shippingCep}
+                  onChange={(e) => {
+                    const formatted = formatCep(e.target.value);
+                    setShippingCep(formatted);
+                    if (formatted !== e.target.value && validateCep(formatted)) {
+                      calculateShipping();
+                    }
+                  }}
+                  className="border-gold/30 flex-1"
+                />
+                <Button
+                  type="button"
+                  variant="outline"
+                  size="icon"
+                  disabled={!validateCep(shippingCep) || loadingShipping}
+                  onClick={calculateShipping}
+                  className="border-gold/30"
+                >
+                  {loadingShipping ? (
+                    <Loader2 className="w-4 h-4 animate-spin" />
+                  ) : (
+                    <Truck className="w-4 h-4" />
+                  )}
+                </Button>
+              </div>
+              <Input
+                placeholder="Endereço completo (rua, número, bairro)"
+                value={shippingAddress}
+                onChange={(e) => setShippingAddress(e.target.value)}
+                className="border-gold/30"
+              />
+              
+              {cepInfo && (
+                <div className="text-xs text-muted-foreground">
+                  {cepInfo.city}, {cepInfo.state}
+                  {cepInfo.isUberaba && <span className="text-gold"> • Entrega local disponível</span>}
+                </div>
+              )}
+
+              {shippingOptions.length > 0 && (
+                <div className="space-y-2">
+                  <p className="text-sm font-medium">Escolha a entrega:</p>
+                  {shippingOptions.map((option) => (
+                    <label
+                      key={option.id}
+                      className="flex items-center justify-between p-2 border rounded cursor-pointer hover:bg-gold/5 border-gold/20"
+                    >
+                      <div className="flex items-center gap-2">
+                        <input
+                          type="radio"
+                          name="shipping"
+                          checked={selectedShipping?.id === option.id}
+                          onChange={() => setSelectedShipping(option)}
+                          className="text-gold"
+                        />
+                        <div>
+                          <p className="text-sm font-medium">{option.serviceName}</p>
+                          <p className="text-xs text-muted-foreground">
+                            {option.estimatedDaysMin === option.estimatedDaysMax
+                              ? `${option.estimatedDaysMin} dia${option.estimatedDaysMin > 1 ? 's' : ''}`
+                              : `${option.estimatedDaysMin}-${option.estimatedDaysMax} dias`}
+                          </p>
+                        </div>
+                      </div>
+                      <span className="text-sm font-medium text-gold">
+                        {formatCents(option.costCents)}
+                      </span>
+                    </label>
+                  ))}
+                </div>
+              )}
+
+              <div className="space-y-1 pt-2 border-t border-gold/20">
+                <div className="flex justify-between text-sm">
+                  <span className="text-muted-foreground">Subtotal</span>
+                  <span>{formatCents(subtotalCents)}</span>
+                </div>
+                {selectedShipping && (
+                  <div className="flex justify-between text-sm">
+                    <span className="text-muted-foreground">Entrega</span>
+                    <span>{formatCents(shippingCostCents)}</span>
+                  </div>
+                )}
+                <div className="flex justify-between text-sm font-medium">
+                  <span className="text-foreground">Total</span>
+                  <span className="text-gold">{formatCents(finalTotalCents)}</span>
+                </div>
               </div>
               <Button
                 className="w-full bg-gold text-onyx hover:bg-gold-soft"

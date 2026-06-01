@@ -22,6 +22,14 @@ export const ORDER_STATUS_LABELS: Record<OrderStatus, string> = {
   refunded: 'Reembolsado',
 };
 
+export const SHIPMENT_STATUS_LABELS: Record<string, string> = {
+  pending: 'Preparando',
+  shipped: 'Enviado',
+  in_transit: 'Em trânsito',
+  delivered: 'Entregue',
+  cancelled: 'Cancelado',
+};
+
 export type OrderItemRow = {
   id: string;
   order_id: string;
@@ -44,11 +52,25 @@ export type OrderRow = {
   shipping_name: string | null;
   shipping_phone: string | null;
   shipping_address: Record<string, unknown> | null;
+  shipping_cep: string | null;
+  shipping_city: string | null;
+  shipping_state: string | null;
+  is_local_delivery: boolean | null;
+  shipping_cost_cents: number | null;
   notes: string | null;
   paid_at: string | null;
   created_at: string;
   updated_at: string;
   order_items?: OrderItemRow[];
+  shipments?: Array<{
+    id: string;
+    shipping_method: string;
+    carrier_service?: string;
+    tracking_code?: string;
+    status: string;
+    estimated_delivery_date?: string;
+    external_tracking_url?: string;
+  }>;
 };
 
 export type OrderStatusHistoryRow = {

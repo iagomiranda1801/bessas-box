@@ -17,6 +17,13 @@ const createOrderSchema = z.object({
   shippingName: z.string().min(1).max(200),
   shippingPhone: z.string().max(30).optional(),
   shippingAddress: z.record(z.unknown()).optional(),
+  shippingCep: z.string().optional(),
+  shippingCity: z.string().optional(),
+  shippingState: z.string().optional(),
+  isLocalDelivery: z.boolean().optional(),
+  shippingCostCents: z.number().int().min(0).optional(),
+  shippingMethod: z.string().optional(),
+  carrierService: z.string().optional(),
 });
 
 const SCHEMA_COLUMN_ERROR = /schema cache|could not find the '[^']+' column/i;
@@ -39,6 +46,11 @@ function buildOrderInsertAttempts(
     status: 'awaiting_payment',
     shipping_name: data.shippingName,
     shipping_phone: data.shippingPhone ?? null,
+    shipping_cep: data.shippingCep ?? null,
+    shipping_city: data.shippingCity ?? null,
+    shipping_state: data.shippingState ?? null,
+    is_local_delivery: data.isLocalDelivery ?? false,
+    shipping_cost_cents: data.shippingCostCents ?? 0,
   };
 
   const hasAddress =
@@ -155,13 +167,36 @@ export const createSupabaseOrderFn = createServerFn({ method: 'POST' })
     }
 
     const orderStatus = (order.status as OrderStatus) ?? 'pending';
-    const { error: historyError } = await client.from('order_status_history').insert({
+    const { error: historyError } =     await client.from('order_status_history').insert({
       order_id: order.id,
       status: orderStatus,
       changed_by: 'checkout',
     });
     if (historyError && SCHEMA_COLUMN_ERROR.test(historyError.message)) {
       console.warn('[checkout] order_status_history ausente — rode admin_orders.sql');
+    }
+
+    // Criar shipment se dados de entrega foram fornecidos
+    if (data.shippingMethod && data.shippingCostCents) {
+      const shipmentData = {
+        order_id: order.id as string,
+        shipping_method: data.shippingMethod as any,
+        carrier_service: data.carrierService || null,
+        shipping_cost_cents: data.shippingCostCents,
+        delivery_address: {
+          name: data.shippingName,
+          phone: data.shippingPhone,
+          cep: data.shippingCep,
+          city: data.shippingCity,
+          state: data.shippingState,
+          ...data.shippingAddress,
+        },
+        status: 'pending' as const,
+      };
+
+      await client.from('shipments').insert(shipmentData).catch(() => {
+        console.warn('[checkout] Erro ao criar shipment - tabela pode não existir');
+      });
     }
 
     const provider = getPaymentProviderInstance();
