@@ -7,7 +7,8 @@ import { getSupabaseServiceClient } from '@/lib/supabase-server';
 const orderSelect = `
   *,
   order_items (*),
-  shipments (id, shipping_method, carrier_service, tracking_code, status, estimated_delivery_date, external_tracking_url)
+  shipments (id, shipping_method, carrier_service, tracking_code, status, estimated_delivery_date, external_tracking_url),
+  payment_charges (id, provider, external_id, billing_type, amount_cents, status, pix_qr_code, pix_copy_paste, invoice_url, expires_at, paid_at, created_at)
 `;
 
 export const adminListOrdersFn = createServerFn({ method: 'POST' })

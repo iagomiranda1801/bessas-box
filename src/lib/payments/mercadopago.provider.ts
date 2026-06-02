@@ -21,10 +21,15 @@ export class MercadoPagoProvider implements PaymentProvider {
     };
   }
 
-  async handleWebhook(payload: unknown): Promise<PaymentWebhookResult | null> {
+  async handleWebhook(payload: unknown, _headers?: Headers): Promise<PaymentWebhookResult | null> {
     const body = payload as { data?: { id?: string }; type?: string; orderId?: string };
     if (body.type === 'payment' && body.orderId) {
-      return { orderId: body.orderId, status: 'paid', paymentId: body.data?.id };
+      return {
+        orderId: body.orderId,
+        paymentId: body.data?.id,
+        chargeStatus: 'confirmed',
+        orderStatus: 'paid',
+      };
     }
     return null;
   }

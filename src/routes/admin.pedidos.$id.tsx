@@ -17,6 +17,8 @@ import { Loader2 } from 'lucide-react';
 import { adminGetOrderFn, adminUpdateOrderStatusFn } from '@/lib/orders.server';
 import { updateShipmentFn } from '@/lib/shipping.server';
 import { getCorreiosTrackingUrl, validateTrackingCode } from '@/lib/shipping/correios-service';
+import { getAsaasDashboardUrl } from '@/lib/payments/asaas-client';
+import { PAYMENT_CHARGE_STATUS_LABELS, type PaymentChargeRow } from '@/lib/payment-charge-types';
 import { formatCents, formatDate, shortOrderId } from '@/lib/admin-utils';
 import { ORDER_STATUSES, ORDER_STATUS_LABELS, type OrderRow, type OrderStatus } from '@/lib/order-types';
 import { useAdminAuthStore } from '@/stores/adminAuthStore';
@@ -130,6 +132,10 @@ function AdminOrderDetailPage() {
 
   if (!order) return null;
 
+  const latestCharge = [...(order.payment_charges ?? [])].sort(
+    (a, b) => new Date(b.created_at).getTime() - new Date(a.created_at).getTime(),
+  )[0] as PaymentChargeRow | undefined;
+
   return (
     <AdminLayout
       title={`Pedido #${shortOrderId(order.id)}`}
@@ -152,11 +158,36 @@ function AdminOrderDetailPage() {
           <p className="text-sm">
             <span className="text-muted-foreground">Criado:</span> {formatDate(order.created_at)}
           </p>
-          {order.payment_provider && (
-            <p className="text-sm">
-              <span className="text-muted-foreground">Pagamento:</span> {order.payment_provider}
-              {order.payment_id && ` · ${order.payment_id}`}
-            </p>
+          {(order.payment_provider || latestCharge) && (
+            <div className="text-sm space-y-1">
+              <p>
+                <span className="text-muted-foreground">Pagamento:</span>{' '}
+                {order.payment_provider === 'asaas' ? 'Asaas (Pix)' : order.payment_provider ?? '—'}
+              </p>
+              {latestCharge && (
+                <p className="text-xs">
+                  <span className="text-muted-foreground">Cobrança:</span>{' '}
+                  {PAYMENT_CHARGE_STATUS_LABELS[latestCharge.status] ?? latestCharge.status}
+                  {' · '}
+                  {formatCents(latestCharge.amount_cents)}
+                </p>
+              )}
+              {(latestCharge?.external_id ?? order.payment_id) && (
+                <p className="text-xs font-mono text-muted-foreground">
+                  {latestCharge?.external_id ?? order.payment_id}
+                </p>
+              )}
+              {order.payment_provider === 'asaas' && latestCharge?.external_id && !latestCharge.external_id.startsWith('asaas-stub') && (
+                <a
+                  href={getAsaasDashboardUrl(latestCharge.external_id)}
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  className="text-xs text-gold hover:underline inline-block"
+                >
+                  Ver cobrança no Asaas ↗
+                </a>
+              )}
+            </div>
           )}
           {order.shipping_name && (
             <div className="text-sm space-y-1 pt-3 border-t border-gold/10">

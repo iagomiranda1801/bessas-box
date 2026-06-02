@@ -1,6 +1,6 @@
 import { useState, useEffect } from 'react';
-import { Link } from '@tanstack/react-router';
-import { ExternalLink, Loader2, Minus, Plus, ShoppingBag, Trash2, Truck } from 'lucide-react';
+import { Link, useNavigate } from '@tanstack/react-router';
+import { Loader2, Minus, Plus, ShoppingBag, Trash2, Truck } from 'lucide-react';
 import { toast } from 'sonner';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
@@ -18,15 +18,18 @@ import { formatCents } from '@/lib/admin-utils';
 import { useSupabaseCartStore } from '@/stores/supabaseCartStore';
 import { useCustomerStore } from '@/stores/customerStore';
 import { formatCep, validateCep } from '@/lib/shipping/cep-service';
+import { formatCpf, validateCpf } from '@/lib/cpf-utils';
 import type { ShippingOption, CepInfo } from '@/lib/shipping/types';
 
 export function SupabaseCartDrawer() {
+  const navigate = useNavigate();
   const [isOpen, setIsOpen] = useState(false);
   const [loading, setLoading] = useState(false);
   const [email, setEmail] = useState('');
   const [shippingName, setShippingName] = useState('');
   const [shippingCep, setShippingCep] = useState('');
   const [shippingAddress, setShippingAddress] = useState('');
+  const [customerCpf, setCustomerCpf] = useState('');
   const [shippingOptions, setShippingOptions] = useState<ShippingOption[]>([]);
   const [selectedShipping, setSelectedShipping] = useState<ShippingOption | null>(null);
   const [cepInfo, setCepInfo] = useState<CepInfo | null>(null);
@@ -104,6 +107,10 @@ export function SupabaseCartDrawer() {
       toast.error('Selecione uma opção de entrega.', { position: 'top-center' });
       return;
     }
+    if (!validateCpf(customerCpf)) {
+      toast.error('Informe um CPF válido.', { position: 'top-center' });
+      return;
+    }
     if (items.length === 0) return;
 
     setLoading(true);
@@ -111,6 +118,7 @@ export function SupabaseCartDrawer() {
       const result = await createSupabaseOrderFn({
         data: {
           customerEmail: trimmedEmail,
+          customerCpf,
           shippingName: name,
           userId: isLoggedIn && customerUserId ? customerUserId : undefined,
           items: items.map((i) => ({ productId: i.productId, quantity: i.quantity })),
@@ -136,11 +144,7 @@ export function SupabaseCartDrawer() {
       }
       clearCart();
       setIsOpen(false);
-      if (result.checkoutUrl) {
-        window.location.href = result.checkoutUrl;
-      } else {
-        toast.success('Pedido criado!', { position: 'top-center' });
-      }
+      navigate({ to: '/checkout/pagar/$orderId', params: { orderId: result.orderId } });
     } catch {
       toast.error('Não foi possível finalizar. Tente novamente.', { position: 'top-center' });
     } finally {
@@ -245,6 +249,13 @@ export function SupabaseCartDrawer() {
                 onChange={(e) => setShippingName(e.target.value)}
                 className="border-gold/30"
               />
+              <Input
+                placeholder="CPF"
+                value={customerCpf}
+                onChange={(e) => setCustomerCpf(formatCpf(e.target.value))}
+                className="border-gold/30"
+                inputMode="numeric"
+              />
               <div className="flex gap-2">
                 <Input
                   placeholder="CEP (ex: 38400-100)"
@@ -346,10 +357,7 @@ export function SupabaseCartDrawer() {
                     Processando…
                   </>
                 ) : (
-                  <>
-                    Finalizar compra
-                    <ExternalLink className="w-4 h-4 ml-2" />
-                  </>
+                  'Pagar com Pix'
                 )}
               </Button>
             </div>

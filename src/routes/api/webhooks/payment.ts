@@ -7,7 +7,11 @@ export const Route = createFileRoute('/api/webhooks/payment')({
       POST: async ({ request }) => {
         try {
           const payload = await request.json();
-          await paymentWebhookFn({ data: { payload } });
+          const headers: Record<string, string> = {};
+          request.headers.forEach((value, key) => {
+            headers[key] = value;
+          });
+          await paymentWebhookFn({ data: { payload, headers } });
           return new Response(JSON.stringify({ received: true }), {
             status: 200,
             headers: { 'Content-Type': 'application/json' },

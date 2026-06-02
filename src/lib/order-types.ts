@@ -1,3 +1,5 @@
+import type { PaymentChargeRow } from '@/lib/payment-charge-types';
+
 export const ORDER_STATUSES = [
   'pending',
   'awaiting_payment',
@@ -57,11 +59,13 @@ export type OrderRow = {
   shipping_state: string | null;
   is_local_delivery: boolean | null;
   shipping_cost_cents: number | null;
+  customer_cpf: string | null;
   notes: string | null;
   paid_at: string | null;
   created_at: string;
   updated_at: string;
   order_items?: OrderItemRow[];
+  payment_charges?: PaymentChargeRow[];
   shipments?: Array<{
     id: string;
     shipping_method: string;

@@ -30,32 +30,41 @@ Rodar no SQL Editor, nesta ordem:
 1. [`supabase/schema.sql`](../supabase/schema.sql)
 2. [`supabase/storage_product_images.sql`](../supabase/storage_product_images.sql)
 3. [`supabase/migrations/admin_orders.sql`](../supabase/migrations/admin_orders.sql) — status, envio, histórico
+4. [`supabase/migrations/payment_data.sql`](../supabase/migrations/payment_data.sql) — CPF do cliente
+5. [`supabase/migrations/payment_charges.sql`](../supabase/migrations/payment_charges.sql) — cobranças Asaas (Pix)
 
 ## Checkout Supabase
 
 Com `CATALOG_SOURCE=supabase` e `CART_SOURCE=supabase` (ou omitido — herda do catálogo):
 
-1. Sacola local (`SupabaseCartDrawer`)
+1. Sacola local (`SupabaseCartDrawer`) — e-mail, CPF, endereço, frete
 2. `createSupabaseOrderFn` grava `orders` + `order_items`, reserva estoque
-3. Provedor de pagamento (`PaymentProvider`) gera cobrança
+3. Asaas gera cobrança Pix — cliente paga em `/checkout/pagar/$orderId`
 4. Webhook `POST /api/webhooks/payment` confirma pagamento
 
-## Pagamentos (camada genérica)
+## Pagamentos Asaas (Pix)
 
-Variável `PAYMENT_PROVIDER=mercadopago|asaas`.
+Variável `PAYMENT_PROVIDER=asaas` (padrão recomendado).
 
-| Provedor | Variáveis | Uso típico |
-|----------|-----------|------------|
-| **Mercado Pago** | `MERCADOPAGO_ACCESS_TOKEN`, `MERCADOPAGO_WEBHOOK_SECRET` | E-commerce, checkout loja |
-| **Asaas** | `ASAAS_API_KEY`, `ASAAS_WEBHOOK_TOKEN` | Cobranças, Pix, split parceiros |
+| Variável | Descrição |
+|----------|-----------|
+| `ASAAS_API_KEY` | Chave API do painel Asaas |
+| `ASAAS_WEBHOOK_TOKEN` | Token de autenticação do webhook |
+| `ASAAS_SANDBOX` | `true` = sandbox, `false` = produção |
 
-Implementações atuais são **stubs** — retornam `/checkout/pending?order=...` até configurar tokens e completar API.
+**Ativar em produção:**
+
+1. Copie a API key em **Asaas → Integrações → API**
+2. Cadastre webhook: `https://seu-dominio.com/api/webhooks/payment` com o token em `ASAAS_WEBHOOK_TOKEN`
+3. Defina `ASAAS_SANDBOX=false`
+
+Sem `ASAAS_API_KEY`, o checkout funciona em **modo demo** (Pix simulado).
 
 Arquivos:
 
-- [`src/lib/payments/types.ts`](../src/lib/payments/types.ts)
-- [`src/lib/payments/mercadopago.provider.ts`](../src/lib/payments/mercadopago.provider.ts)
+- [`src/lib/payments/asaas-client.ts`](../src/lib/payments/asaas-client.ts)
 - [`src/lib/payments/asaas.provider.ts`](../src/lib/payments/asaas.provider.ts)
+- [`src/routes/checkout.pagar.$orderId.tsx`](../src/routes/checkout.pagar.$orderId.tsx)
 - [`src/lib/checkout.server.ts`](../src/lib/checkout.server.ts)
 
 ## Pedido de teste (SQL)
