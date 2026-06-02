@@ -182,9 +182,10 @@ export type CustomerProfile = {
 const PROFILES_SCHEMA_ERROR = /profiles.*schema cache|table ['"]?public\.profiles/i;
 
 function profilesSchemaHint(message: string) {
-  return PROFILES_SCHEMA_ERROR.test(message)
-    ? ' Crie a tabela: no Supabase → SQL Editor, execute supabase/migrations/profiles.sql e depois Settings → API → Reload schema cache.'
-    : '';
+  if (PROFILES_SCHEMA_ERROR.test(message)) {
+    console.warn('[profile] Tabela profiles ausente — rode profiles.sql no Supabase.');
+  }
+  return '';
 }
 
 function profileFromUserMetadata(user: {

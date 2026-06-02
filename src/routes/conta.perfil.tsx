@@ -47,8 +47,6 @@ function CustomerProfilePage() {
   const [profile, setProfile] = useState<CustomerProfile | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
-  const [dbSetupNeeded, setDbSetupNeeded] = useState(false);
-
   const form = useForm<ProfileFormValues>({
     resolver: zodResolver(profileSchema),
     defaultValues: { fullName: '', phone: '' },
@@ -69,7 +67,6 @@ function CustomerProfilePage() {
         return;
       }
       setProfile(result.profile);
-      setDbSetupNeeded('profilesTableMissing' in result && result.profilesTableMissing === true);
       form.reset({
         fullName: result.profile.fullName ?? '',
         phone: result.profile.phone ?? '',
@@ -101,19 +98,12 @@ function CustomerProfilePage() {
         ? { ...prev, fullName: result.profile.fullName, phone: result.profile.phone }
         : result.profile,
     );
-    if ('profilesTableMissing' in result && result.profilesTableMissing) {
-      setDbSetupNeeded(true);
-      toast.success('Dados salvos na conta (modo temporário).', { position: 'top-center' });
-    } else {
-      setDbSetupNeeded(false);
-      toast.success('Perfil atualizado!', { position: 'top-center' });
-    }
+    toast.success('Perfil atualizado!', { position: 'top-center' });
   };
 
   return (
     <AccountShell
       title="Meu perfil"
-      description="Seus dados para entrega e contato."
       returnTo="/conta/perfil"
     >
       {loading ? (
@@ -124,17 +114,9 @@ function CustomerProfilePage() {
         </div>
       ) : (
         <div className="premium-card rounded-xl p-6 sm:p-8 space-y-6">
-          {dbSetupNeeded && (
-            <p className="text-xs text-amber-200/90 bg-amber-500/10 border border-amber-500/30 rounded-md px-3 py-2">
-              A tabela <code className="text-amber-100">profiles</code> ainda não existe no Supabase. Rode{' '}
-              <code className="text-amber-100">supabase/migrations/profiles.sql</code> no SQL Editor e recarregue o
-              schema cache (Settings → API).
-            </p>
-          )}
           <div className="space-y-1 text-sm">
             <p className="text-muted-foreground">E-mail</p>
             <p className="font-medium">{profile?.email ?? email}</p>
-            <p className="text-xs text-muted-foreground">O e-mail não pode ser alterado aqui.</p>
           </div>
 
           {profile?.memberSince && (

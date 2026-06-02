@@ -159,70 +159,27 @@ function AdminOrderDetailPage() {
             </p>
           )}
           {order.shipping_name && (
-            <div className="text-sm space-y-2 pt-3 border-t border-gold/10">
-              <p className="text-muted-foreground font-medium">Dados de Entrega</p>
-              <div className="space-y-1">
-                <p><strong>Nome:</strong> {order.shipping_name}</p>
-                {order.shipping_phone && <p><strong>Telefone:</strong> {order.shipping_phone}</p>}
-                {order.shipping_cep && <p><strong>CEP:</strong> {order.shipping_cep}</p>}
-                {order.shipping_city && order.shipping_state && (
-                  <p><strong>Cidade:</strong> {order.shipping_city}, {order.shipping_state}</p>
-                )}
-                {order.is_local_delivery && (
-                  <p className="text-gold text-xs">📍 Entrega local (Uberaba)</p>
-                )}
-                {order.shipping_cost_cents && order.shipping_cost_cents > 0 && (
-                  <p><strong>Custo do frete:</strong> {formatCents(order.shipping_cost_cents)}</p>
-                )}
-              </div>
-              {order.shipping_address && (
-                <details className="mt-2">
-                  <summary className="text-xs text-muted-foreground cursor-pointer">Endereço completo</summary>
-                  <pre className="text-xs whitespace-pre-wrap text-muted-foreground mt-1">
-                    {JSON.stringify(order.shipping_address, null, 2)}
-                  </pre>
-                </details>
+            <div className="text-sm space-y-1 pt-3 border-t border-gold/10">
+              <p className="text-muted-foreground">Entrega</p>
+              <p>{order.shipping_name}</p>
+              {order.shipping_cep && <p className="text-muted-foreground">{order.shipping_cep}</p>}
+              {order.shipping_city && order.shipping_state && (
+                <p className="text-muted-foreground">{order.shipping_city}, {order.shipping_state}</p>
+              )}
+              {typeof order.shipping_address?.street === 'string' && (
+                <p className="text-muted-foreground">{order.shipping_address.street as string}</p>
               )}
             </div>
           )}
 
-          {/* Seção de Rastreamento */}
-          {order.shipments && order.shipments.length > 0 ? (
-            <div className="text-sm space-y-2 pt-3 border-t border-gold/10">
-              <p className="text-muted-foreground font-medium">Envio</p>
-              {order.shipments.map((shipment) => (
-                <div key={shipment.id} className="space-y-1 p-2 bg-gold/5 rounded">
-                  <p><strong>Método:</strong> {shipment.shipping_method === 'uber_local' ? 'Uber Connect' : 'Correios'}</p>
-                  {shipment.carrier_service && (
-                    <p><strong>Serviço:</strong> {shipment.carrier_service}</p>
-                  )}
-                  {shipment.tracking_code && (
-                    <div>
-                      <p><strong>Código:</strong> {shipment.tracking_code}</p>
-                      {shipment.external_tracking_url && (
-                        <a
-                          href={shipment.external_tracking_url}
-                          target="_blank"
-                          rel="noopener noreferrer"
-                          className="text-gold hover:underline text-xs"
-                        >
-                          Rastrear online ↗
-                        </a>
-                      )}
-                    </div>
-                  )}
-                  <p><strong>Status:</strong> {shipment.status}</p>
-                  {shipment.estimated_delivery_date && (
-                    <p><strong>Previsão:</strong> {new Date(shipment.estimated_delivery_date).toLocaleDateString('pt-BR')}</p>
-                  )}
-                </div>
-              ))}
+          {order.shipments?.[0]?.tracking_code ? (
+            <div className="text-sm space-y-1 pt-3 border-t border-gold/10">
+              <p className="text-muted-foreground">Rastreamento</p>
+              <p className="font-mono">{order.shipments[0].tracking_code}</p>
             </div>
-          ) : order.status === 'paid' || order.status === 'processing' ? (
+          ) : (order.status === 'paid' || order.status === 'processing') ? (
             <div className="text-sm space-y-3 pt-3 border-t border-gold/10">
-              <p className="text-muted-foreground font-medium">Adicionar Rastreamento</p>
-              <div className="space-y-2">
-                <Input
+              <Input
                   placeholder="Código de rastreamento"
                   value={trackingCode}
                   onChange={(e) => setTrackingCode(e.target.value.toUpperCase())}
@@ -263,7 +220,6 @@ function AdminOrderDetailPage() {
                     'Marcar como Enviado'
                   )}
                 </Button>
-              </div>
             </div>
           ) : null}
 

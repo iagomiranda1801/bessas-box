@@ -71,9 +71,6 @@ function AdminLoginPage() {
         <div className="space-y-1 text-center">
           <p className="text-gold text-xs tracking-[0.25em] uppercase">Admin</p>
           <h1 className="font-display text-3xl">Entrar</h1>
-          <p className="text-sm text-muted-foreground">
-            Use o e-mail cadastrado em ADMIN_EMAILS e sua senha do Supabase Auth.
-          </p>
         </div>
         <form onSubmit={handleSubmit} className="space-y-4">
           <div className="space-y-2">

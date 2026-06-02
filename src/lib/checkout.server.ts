@@ -65,9 +65,11 @@ function buildOrderInsertAttempts(
 }
 
 function schemaMigrationHint(message: string) {
-  return SCHEMA_COLUMN_ERROR.test(message)
-    ? ' Rode no Supabase → SQL Editor o arquivo supabase/migrations/admin_orders.sql e depois Settings → API → Reload schema cache.'
-    : '';
+  if (SCHEMA_COLUMN_ERROR.test(message)) {
+    console.warn('[checkout] Schema desatualizado — rode as migrations no Supabase.');
+    return ' Tente novamente em instantes.';
+  }
+  return '';
 }
 
 export const createSupabaseOrderFn = createServerFn({ method: 'POST' })

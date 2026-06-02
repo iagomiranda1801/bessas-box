@@ -281,15 +281,14 @@ export function SupabaseCartDrawer() {
               />
               
               {cepInfo && (
-                <div className="text-xs text-muted-foreground">
+                <p className="text-xs text-muted-foreground">
                   {cepInfo.city}, {cepInfo.state}
-                  {cepInfo.isUberaba && <span className="text-gold"> • Entrega local disponível</span>}
-                </div>
+                </p>
               )}
 
               {shippingOptions.length > 0 && (
                 <div className="space-y-2">
-                  <p className="text-sm font-medium">Escolha a entrega:</p>
+                  <p className="text-sm font-medium">Entrega</p>
                   {shippingOptions.map((option) => (
                     <label
                       key={option.id}

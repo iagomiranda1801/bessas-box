@@ -14,7 +14,7 @@ export const accessTokenSchema = z.object({
 export async function verifyAdminAccessToken(accessToken: string): Promise<AdminAuthResult> {
   const allowed = getAdminEmails();
   if (allowed.length === 0) {
-    return { ok: false, message: 'ADMIN_EMAILS não configurado no servidor.' };
+    return { ok: false, message: 'Acesso administrativo indisponível.' };
   }
 
   const client = getSupabaseAnonServerClient();
