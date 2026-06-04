@@ -40,7 +40,7 @@ export function ProductCard({ product, featured = false, className }: ProductCar
 
   const addVariantToCart = async (variant: (typeof variants)[0]) => {
     if (!variant.availableForSale) {
-      toast.error("Esta variação está esgotada");
+      toast.error("Este tamanho está esgotado");
       return;
     }
 
@@ -155,7 +155,7 @@ export function ProductCard({ product, featured = false, className }: ProductCar
             )}
             aria-label={
               hasMultipleVariants
-                ? `Escolher variação e adicionar ${product.node.title} à sacola`
+                ? `Escolher tamanho e adicionar ${product.node.title} à sacola`
                 : `Adicionar ${product.node.title} à sacola`
             }
           >
@@ -174,7 +174,7 @@ export function ProductCard({ product, featured = false, className }: ProductCar
             <DialogTitle className="font-display text-xl normal-case">
               {product.node.title}
             </DialogTitle>
-            <DialogDescription>Selecione a variação para adicionar à sacola</DialogDescription>
+            <DialogDescription>Selecione o tamanho para adicionar à sacola</DialogDescription>
           </DialogHeader>
           <div className="flex flex-wrap gap-2 py-2">
             {variants.map((v) => (

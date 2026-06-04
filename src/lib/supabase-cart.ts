@@ -1,14 +1,13 @@
 import type { ShopifyProduct } from '@/lib/shopify';
+import { parseVariantId } from '@/lib/product-sizes';
 import { useSupabaseCartStore } from '@/stores/supabaseCartStore';
 
+/** @deprecated Use parseVariantId from product-sizes */
 export function parseSupabaseVariantId(variantId: string): string | null {
-  if (!variantId.startsWith('supabase-variant-')) return null;
-  return variantId.replace('supabase-variant-', '');
+  return parseVariantId(variantId)?.productId ?? null;
 }
 
-export function supabaseVariantId(productId: string): string {
-  return `supabase-variant-${productId}`;
-}
+export { buildVariantId as supabaseVariantId } from '@/lib/product-sizes';
 
 type VariantNode = {
   id: string;
@@ -27,15 +26,23 @@ export function addProductToSupabaseCart(
     return { ok: false, message: 'Produto esgotado.' };
   }
 
-  const productId = parseSupabaseVariantId(variant.id) ?? product.node.id;
+  const parsed = parseVariantId(variant.id);
+  const productId = parsed?.productId ?? product.node.id;
+  const size =
+    parsed?.size ??
+    variant.selectedOptions.find((o) => o.name === 'Tamanho')?.value ??
+    variant.title;
   const priceCents = Math.round(parseFloat(variant.price.amount) * 100);
+  const displayTitle =
+    size && size !== 'Default Title' ? `${product.node.title} — ${size}` : product.node.title;
 
   return useSupabaseCartStore.getState().addItem({
     productId,
+    size,
     slug: product.node.handle,
-    title: product.node.title,
+    title: displayTitle,
     priceCents,
     imageUrl: product.node.images.edges[0]?.node.url ?? null,
-    stockQuantity: variant.quantityAvailable ?? 99,
+    stockQuantity: variant.quantityAvailable ?? 0,
   });
 }

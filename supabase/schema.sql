@@ -14,6 +14,9 @@ create table if not exists public.products (
   stock_quantity integer not null default 0 check (stock_quantity >= 0),
   is_active boolean not null default true,
   is_featured boolean not null default false,
+  product_category text not null default 'camiseta',
+  size_profile text not null default 'apparel',
+  size_stock jsonb not null default '{}'::jsonb,
   created_at timestamptz not null default now(),
   updated_at timestamptz not null default now()
 );
@@ -102,6 +105,7 @@ create table if not exists public.order_items (
   product_title text not null,
   quantity integer not null check (quantity > 0),
   unit_price_cents integer not null,
+  size text,
   created_at timestamptz not null default now()
 );
 

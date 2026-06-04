@@ -6,8 +6,9 @@ import { AdminLayout } from '@/components/admin/AdminLayout';
 import { ProductImagesPanel } from '@/components/admin/ProductImagesPanel';
 import {
   ProductForm,
-  centsToPriceInput,
+  formValuesToAdminPayload,
   parsePriceToCents,
+  productRowToFormDefaults,
   type ProductFormValues,
 } from '@/components/admin/ProductForm';
 import { Button } from '@/components/ui/button';
@@ -67,6 +68,7 @@ function AdminEditProductPage() {
     setSaving(true);
     try {
       const priceCents = parsePriceToCents(values.priceReais);
+      const sizePayload = formValuesToAdminPayload(values);
       const result = await adminUpdateProductFn({
         data: {
           accessToken,
@@ -75,7 +77,9 @@ function AdminEditProductPage() {
           slug: values.slug?.trim() || undefined,
           description: values.description,
           priceCents,
-          stockQuantity: values.stockQuantity,
+          stockQuantity: sizePayload.stockQuantity,
+          productCategory: sizePayload.productCategory,
+          sizeStock: sizePayload.sizeStock,
           isActive: values.isActive,
           isFeatured: values.isFeatured,
         },
@@ -115,15 +119,7 @@ function AdminEditProductPage() {
       <ProductForm
         submitLabel="Salvar alterações"
         disabled={saving}
-        defaultValues={{
-          title: product.title,
-          slug: product.slug,
-          description: product.description ?? '',
-          priceReais: centsToPriceInput(product.price_cents),
-          stockQuantity: product.stock_quantity,
-          isActive: product.is_active,
-          isFeatured: product.is_featured,
-        }}
+        defaultValues={productRowToFormDefaults(product)}
         onSubmit={handleSubmit}
       />
 

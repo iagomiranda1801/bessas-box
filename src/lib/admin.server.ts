@@ -16,29 +16,57 @@ import {
 
 } from '@/lib/supabase-catalog';
 
+import {
+  getSizeProfileForCategory,
+  normalizeSizeStock,
+  sumSizeStock,
+  type ProductCategory,
+  type SizeStock,
+} from '@/lib/product-sizes';
 import { getSupabaseServiceClient } from '@/lib/supabase-server';
 
-
+const productCategorySchema = z.enum([
+  'camiseta',
+  'polo',
+  'shorts',
+  'tenis',
+  'calca_jeans',
+  'bone',
+]);
 
 const productInputSchema = z.object({
-
   accessToken: z.string().min(1),
-
   title: z.string().min(1).max(200),
-
   description: z.string().max(5000).optional(),
-
   priceCents: z.number().int().positive(),
-
   stockQuantity: z.number().int().min(0),
-
+  productCategory: productCategorySchema,
+  sizeStock: z.record(z.string(), z.coerce.number().int().min(0)),
   isActive: z.boolean(),
-
   isFeatured: z.boolean(),
-
   slug: z.string().max(80).optional(),
-
 });
+
+const SCHEMA_COLUMN_ERROR = /schema cache|could not find the '[^']+' column/i;
+
+function buildProductDbPayload(data: z.infer<typeof productInputSchema>) {
+  const productCategory = data.productCategory as ProductCategory;
+  const sizeProfile = getSizeProfileForCategory(productCategory);
+  const sizeStock = normalizeSizeStock(sizeProfile, data.sizeStock as SizeStock);
+  const stockQuantity = sumSizeStock(sizeStock);
+
+  return {
+    title: data.title,
+    description: data.description ?? '',
+    price_cents: data.priceCents,
+    stock_quantity: stockQuantity,
+    product_category: productCategory,
+    size_profile: sizeProfile,
+    size_stock: sizeStock,
+    is_active: data.isActive,
+    is_featured: data.isFeatured,
+  };
+}
 
 
 
@@ -102,31 +130,35 @@ export const adminCreateProductFn = createServerFn({ method: 'POST' })
 
     const client = getSupabaseServiceClient();
 
-    const { data: row, error } = await client
+    const basePayload = buildProductDbPayload(data);
+    let row: { id: string } | null = null;
+    let error: { message: string; code?: string } | null = null;
 
+    const fullInsert = await client
       .from('products')
-
-      .insert({
-
-        title: data.title,
-
-        slug,
-
-        description: data.description ?? '',
-
-        price_cents: data.priceCents,
-
-        stock_quantity: data.stockQuantity,
-
-        is_active: data.isActive,
-
-        is_featured: data.isFeatured,
-
-      })
-
+      .insert({ ...basePayload, slug })
       .select('id')
-
       .single();
+    row = fullInsert.data as { id: string } | null;
+    error = fullInsert.error;
+
+    if (error && SCHEMA_COLUMN_ERROR.test(error.message)) {
+      const legacyInsert = await client
+        .from('products')
+        .insert({
+          title: data.title,
+          slug,
+          description: data.description ?? '',
+          price_cents: data.priceCents,
+          stock_quantity: data.stockQuantity,
+          is_active: data.isActive,
+          is_featured: data.isFeatured,
+        })
+        .select('id')
+        .single();
+      row = legacyInsert.data as { id: string } | null;
+      error = legacyInsert.error;
+    }
 
 
 
@@ -172,31 +204,31 @@ export const adminUpdateProductFn = createServerFn({ method: 'POST' })
 
     const client = getSupabaseServiceClient();
 
-    const { error } = await client
+    const basePayload = {
+      ...buildProductDbPayload(data),
+      slug,
+      updated_at: new Date().toISOString(),
+    };
 
-      .from('products')
+    let error = (await client.from('products').update(basePayload).eq('id', data.id)).error;
 
-      .update({
-
-        title: data.title,
-
-        slug,
-
-        description: data.description ?? '',
-
-        price_cents: data.priceCents,
-
-        stock_quantity: data.stockQuantity,
-
-        is_active: data.isActive,
-
-        is_featured: data.isFeatured,
-
-        updated_at: new Date().toISOString(),
-
-      })
-
-      .eq('id', data.id);
+    if (error && SCHEMA_COLUMN_ERROR.test(error.message)) {
+      error = (
+        await client
+          .from('products')
+          .update({
+            title: data.title,
+            slug,
+            description: data.description ?? '',
+            price_cents: data.priceCents,
+            stock_quantity: data.stockQuantity,
+            is_active: data.isActive,
+            is_featured: data.isFeatured,
+            updated_at: new Date().toISOString(),
+          })
+          .eq('id', data.id)
+      ).error;
+    }
 
 
 

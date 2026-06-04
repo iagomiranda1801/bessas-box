@@ -1,8 +1,10 @@
 import { create } from 'zustand';
 import { persist, createJSONStorage } from 'zustand/middleware';
+import { cartLineKey } from '@/lib/product-sizes';
 
 export type SupabaseCartItem = {
   productId: string;
+  size: string;
   slug: string;
   title: string;
   priceCents: number;
@@ -13,9 +15,16 @@ export type SupabaseCartItem = {
 
 type SupabaseCartStore = {
   items: SupabaseCartItem[];
-  addItem: (item: Omit<SupabaseCartItem, 'quantity'>, quantity?: number) => { ok: boolean; message?: string };
-  updateQuantity: (productId: string, quantity: number) => { ok: boolean; message?: string };
-  removeItem: (productId: string) => void;
+  addItem: (
+    item: Omit<SupabaseCartItem, 'quantity'>,
+    quantity?: number,
+  ) => { ok: boolean; message?: string };
+  updateQuantity: (
+    productId: string,
+    size: string,
+    quantity: number,
+  ) => { ok: boolean; message?: string };
+  removeItem: (productId: string, size: string) => void;
   clearCart: () => void;
   totalCents: () => number;
 };
@@ -26,7 +35,10 @@ export const useSupabaseCartStore = create<SupabaseCartStore>()(
       items: [],
 
       addItem: (item, quantity = 1) => {
-        const existing = get().items.find((i) => i.productId === item.productId);
+        const key = cartLineKey(item.productId, item.size);
+        const existing = get().items.find(
+          (i) => cartLineKey(i.productId, i.size) === key,
+        );
         const nextQty = (existing?.quantity ?? 0) + quantity;
         if (nextQty > item.stockQuantity) {
           return { ok: false, message: 'Estoque insuficiente.' };
@@ -34,7 +46,9 @@ export const useSupabaseCartStore = create<SupabaseCartStore>()(
         if (existing) {
           set({
             items: get().items.map((i) =>
-              i.productId === item.productId ? { ...i, quantity: nextQty } : i,
+              cartLineKey(i.productId, i.size) === key
+                ? { ...i, quantity: nextQty, stockQuantity: item.stockQuantity }
+                : i,
             ),
           });
         } else {
@@ -43,26 +57,34 @@ export const useSupabaseCartStore = create<SupabaseCartStore>()(
         return { ok: true };
       },
 
-      updateQuantity: (productId, quantity) => {
+      updateQuantity: (productId, size, quantity) => {
+        const key = cartLineKey(productId, size);
         if (quantity <= 0) {
-          get().removeItem(productId);
+          get().removeItem(productId, size);
           return { ok: true };
         }
-        const item = get().items.find((i) => i.productId === productId);
+        const item = get().items.find(
+          (i) => cartLineKey(i.productId, i.size) === key,
+        );
         if (!item) return { ok: false, message: 'Item não encontrado.' };
         if (quantity > item.stockQuantity) {
           return { ok: false, message: 'Estoque insuficiente.' };
         }
         set({
           items: get().items.map((i) =>
-            i.productId === productId ? { ...i, quantity } : i,
+            cartLineKey(i.productId, i.size) === key ? { ...i, quantity } : i,
           ),
         });
         return { ok: true };
       },
 
-      removeItem: (productId) => {
-        set({ items: get().items.filter((i) => i.productId !== productId) });
+      removeItem: (productId, size) => {
+        const key = cartLineKey(productId, size);
+        set({
+          items: get().items.filter(
+            (i) => cartLineKey(i.productId, i.size) !== key,
+          ),
+        });
       },
 
       clearCart: () => set({ items: [] }),
@@ -73,8 +95,20 @@ export const useSupabaseCartStore = create<SupabaseCartStore>()(
     {
       name: 'bessa-supabase-cart',
       storage: createJSONStorage(() => localStorage),
+      version: 2,
+      migrate: (persisted, version) => {
+        const state = persisted as { items?: Array<Record<string, unknown>> };
+        if (version < 2 && state?.items) {
+          state.items = state.items.map((item) => ({
+            ...item,
+            size: typeof item.size === 'string' ? item.size : 'M',
+          }));
+        }
+        return state as SupabaseCartStore;
+      },
     },
   ),
 );
 
-export { parseSupabaseVariantId, supabaseVariantId } from '@/lib/supabase-cart';
+export { parseVariantId as parseSupabaseVariantId } from '@/lib/product-sizes';
+export { buildVariantId as supabaseVariantId } from '@/lib/product-sizes';

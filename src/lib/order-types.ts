@@ -39,6 +39,7 @@ export type OrderItemRow = {
   product_title: string;
   quantity: number;
   unit_price_cents: number;
+  size?: string | null;
   created_at: string;
 };
 

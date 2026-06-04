@@ -153,7 +153,7 @@ function ProductPage() {
             {variants.length > 1 && (
               <div className="space-y-3">
                 <p className="text-sm tracking-[0.15em] uppercase font-medium" id="variant-label">
-                  Variação
+                  Tamanho
                 </p>
                 <div className="flex flex-wrap gap-2" role="group" aria-labelledby="variant-label">
                   {variants.map(({ node: v }) => (

@@ -12,6 +12,8 @@ export type StoreProductVariant = {
   selectedOptions: Array<{ name: string; value: string }>;
 };
 
+import type { ProductCategory, SizeProfile, SizeStock } from '@/lib/product-sizes';
+
 export type StoreProduct = {
   id: string;
   title: string;
@@ -23,6 +25,8 @@ export type StoreProduct = {
   isActive: boolean;
   isFeatured: boolean;
   stockQuantity: number;
+  productCategory: ProductCategory;
+  sizeProfile: SizeProfile;
 };
 
 export type AdminProductRow = {
@@ -35,6 +39,9 @@ export type AdminProductRow = {
   stock_quantity: number;
   is_active: boolean;
   is_featured: boolean;
+  product_category?: ProductCategory | string | null;
+  size_profile?: SizeProfile | string | null;
+  size_stock?: SizeStock | null;
   created_at: string;
   product_images: Array<{
     id: string;

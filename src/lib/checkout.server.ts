@@ -6,16 +6,45 @@ import { cleanCpf, validateCpf } from '@/lib/cpf-utils';
 import type { OrderRow, OrderStatus } from '@/lib/order-types';
 import type { PaymentChargeStatus } from '@/lib/payment-charge-types';
 import type { PaymentChargeResult } from '@/lib/payments/types';
+import {
+  normalizeSizeStock,
+  sumSizeStock,
+  type SizeProfile,
+  type SizeStock,
+} from '@/lib/product-sizes';
 import { getSupabaseServiceClient } from '@/lib/supabase-server';
 
 const checkoutItemSchema = z.object({
   productId: z.string().uuid(),
+  size: z.string().min(1),
   quantity: z.number().int().positive(),
 });
 
+type CheckoutProductRow = {
+  id: string;
+  title: string;
+  price_cents: number;
+  stock_quantity: number;
+  is_active: boolean;
+  size_stock?: SizeStock | null;
+  size_profile?: SizeProfile | string | null;
+};
+
+function stockForSize(product: CheckoutProductRow, size: string): number {
+  if (product.size_stock && typeof product.size_stock === 'object') {
+    const qty = product.size_stock[size];
+    if (typeof qty === 'number') return qty;
+  }
+  return product.stock_quantity;
+}
+
 const createOrderSchema = z.object({
   customerEmail: z.string().email(),
-  customerCpf: z.string().min(11).max(14),
+  customerCpf: z
+    .string()
+    .min(1)
+    .transform((value) => cleanCpf(value))
+    .pipe(z.string().length(11, 'CPF inválido.')),
   userId: z.string().uuid().optional(),
   items: z.array(checkoutItemSchema).min(1),
   shippingName: z.string().min(1).max(200),
@@ -27,7 +56,7 @@ const createOrderSchema = z.object({
   isLocalDelivery: z.boolean().optional(),
   shippingCostCents: z.number().int().min(0).optional(),
   shippingMethod: z.string().optional(),
-  carrierService: z.string().optional(),
+  carrierService: z.string().nullish(),
 });
 
 const SCHEMA_COLUMN_ERROR = /schema cache|could not find the '[^']+' column/i;
@@ -61,14 +90,19 @@ function buildOrderInsertAttempts(
   const hasAddress =
     data.shippingAddress != null && Object.keys(data.shippingAddress).length > 0;
 
-  const attempts: OrderInsert[] = hasAddress
-    ? [{ ...withShipping, shipping_address: data.shippingAddress }]
-    : [];
-  attempts.push(withShipping);
-
   const withoutCpf = { ...withShipping };
   delete withoutCpf.customer_cpf;
+
+  // Tenta sem customer_cpf primeiro (coluna pode não existir no Supabase)
+  const attempts: OrderInsert[] = [];
+  if (hasAddress) {
+    attempts.push({ ...withoutCpf, shipping_address: data.shippingAddress });
+  }
   attempts.push(withoutCpf);
+  if (hasAddress) {
+    attempts.push({ ...withShipping, shipping_address: data.shippingAddress });
+  }
+  attempts.push(withShipping);
   attempts.push({ ...common, status: 'pending' });
 
   const commonWithoutCpf = { ...common };
@@ -114,9 +148,25 @@ const orderPaymentSelect = `
   customer_email, shipping_name, created_at, paid_at
 `;
 
+function orderRowForCharge(
+  order: Record<string, unknown>,
+  data: z.infer<typeof createOrderSchema>,
+): OrderRow {
+  return {
+    ...(order as OrderRow),
+    customer_cpf:
+      (order.customer_cpf as string | null | undefined) ?? cleanCpf(data.customerCpf),
+    shipping_name:
+      (order.shipping_name as string | null | undefined) ?? data.shippingName,
+    shipping_phone:
+      (order.shipping_phone as string | null | undefined) ?? data.shippingPhone ?? null,
+  };
+}
+
 export const createSupabaseOrderFn = createServerFn({ method: 'POST' })
   .inputValidator(createOrderSchema)
   .handler(async ({ data }) => {
+    try {
     if (!validateCpf(data.customerCpf)) {
       return { ok: false as const, message: 'CPF inválido.' };
     }
@@ -124,12 +174,20 @@ export const createSupabaseOrderFn = createServerFn({ method: 'POST' })
     const client = getSupabaseServiceClient();
     const productIds = data.items.map((i) => i.productId);
 
-    const { data: products, error: productsError } = await client
+    let productsResult = await client
       .from('products')
-      .select('id, title, price_cents, stock_quantity, is_active')
+      .select('id, title, price_cents, stock_quantity, is_active, size_stock, size_profile')
       .in('id', productIds);
 
-    if (productsError || !products?.length) {
+    if (productsResult.error && SCHEMA_COLUMN_ERROR.test(productsResult.error.message)) {
+      productsResult = await client
+        .from('products')
+        .select('id, title, price_cents, stock_quantity, is_active')
+        .in('id', productIds);
+    }
+
+    const products = productsResult.data as CheckoutProductRow[] | null;
+    if (productsResult.error || !products?.length) {
       return { ok: false as const, message: 'Produtos inválidos.' };
     }
 
@@ -140,6 +198,7 @@ export const createSupabaseOrderFn = createServerFn({ method: 'POST' })
       product_title: string;
       quantity: number;
       unit_price_cents: number;
+      size: string;
     }> = [];
 
     for (const item of data.items) {
@@ -147,18 +206,20 @@ export const createSupabaseOrderFn = createServerFn({ method: 'POST' })
       if (!product?.is_active) {
         return { ok: false as const, message: `Produto indisponível.` };
       }
-      if (product.stock_quantity < item.quantity) {
+      const available = stockForSize(product, item.size);
+      if (available < item.quantity) {
         return {
           ok: false as const,
-          message: `Estoque insuficiente para ${product.title}.`,
+          message: `Estoque insuficiente para ${product.title} (tamanho ${item.size}).`,
         };
       }
       totalCents += product.price_cents * item.quantity;
       lineItems.push({
         product_id: product.id,
-        product_title: product.title,
+        product_title: `${product.title} — ${item.size}`,
         quantity: item.quantity,
         unit_price_cents: product.price_cents,
+        size: item.size,
       });
     }
 
@@ -174,7 +235,7 @@ export const createSupabaseOrderFn = createServerFn({ method: 'POST' })
       const result = await client.from('orders').insert(payload).select('*').single();
       if (!result.error && result.data) {
         order = result.data as Record<string, unknown>;
-        usedLegacySchema = i === insertAttempts.length - 1;
+        usedLegacySchema = (order.status as string) === 'pending';
         break;
       }
       orderError = result.error;
@@ -195,12 +256,32 @@ export const createSupabaseOrderFn = createServerFn({ method: 'POST' })
       };
     }
 
-    const { error: itemsError } = await client.from('order_items').insert(
-      lineItems.map((li) => ({
-        order_id: orderId,
-        ...li,
-      })),
-    );
+    let itemsError = (
+      await client.from('order_items').insert(
+        lineItems.map((li) => ({
+          order_id: orderId,
+          product_id: li.product_id,
+          product_title: li.product_title,
+          quantity: li.quantity,
+          unit_price_cents: li.unit_price_cents,
+          size: li.size,
+        })),
+      )
+    ).error;
+
+    if (itemsError && SCHEMA_COLUMN_ERROR.test(itemsError.message)) {
+      itemsError = (
+        await client.from('order_items').insert(
+          lineItems.map((li) => ({
+            order_id: orderId,
+            product_id: li.product_id,
+            product_title: li.product_title,
+            quantity: li.quantity,
+            unit_price_cents: li.unit_price_cents,
+          })),
+        )
+      ).error;
+    }
 
     if (itemsError) {
       await client.from('orders').delete().eq('id', orderId);
@@ -209,13 +290,43 @@ export const createSupabaseOrderFn = createServerFn({ method: 'POST' })
 
     for (const item of data.items) {
       const product = productMap.get(item.productId)!;
-      await client
-        .from('products')
-        .update({
-          stock_quantity: product.stock_quantity - item.quantity,
-          updated_at: new Date().toISOString(),
-        })
-        .eq('id', item.productId);
+      const profile = (product.size_profile as SizeProfile) ?? 'apparel';
+      const hasSizeStock =
+        product.size_stock &&
+        typeof product.size_stock === 'object' &&
+        Object.keys(product.size_stock).length > 0;
+
+      if (hasSizeStock) {
+        const sizeStock = normalizeSizeStock(profile, product.size_stock as SizeStock);
+        const current = sizeStock[item.size] ?? 0;
+        sizeStock[item.size] = Math.max(0, current - item.quantity);
+        const newTotal = sumSizeStock(sizeStock);
+        const { error: stockError } = await client
+          .from('products')
+          .update({
+            size_stock: sizeStock,
+            stock_quantity: newTotal,
+            updated_at: new Date().toISOString(),
+          })
+          .eq('id', item.productId);
+        if (stockError && SCHEMA_COLUMN_ERROR.test(stockError.message)) {
+          await client
+            .from('products')
+            .update({
+              stock_quantity: product.stock_quantity - item.quantity,
+              updated_at: new Date().toISOString(),
+            })
+            .eq('id', item.productId);
+        }
+      } else {
+        await client
+          .from('products')
+          .update({
+            stock_quantity: product.stock_quantity - item.quantity,
+            updated_at: new Date().toISOString(),
+          })
+          .eq('id', item.productId);
+      }
     }
 
     const orderStatus = (order.status as OrderStatus) ?? 'pending';
@@ -251,7 +362,7 @@ export const createSupabaseOrderFn = createServerFn({ method: 'POST' })
     let charge: PaymentChargeResult;
     try {
       const provider = getPaymentProviderInstance();
-      charge = await provider.createCharge(order as OrderRow);
+      charge = await provider.createCharge(orderRowForCharge(order, data));
     } catch (error) {
       await client.from('order_items').delete().eq('order_id', orderId);
       await client.from('orders').delete().eq('id', orderId);
@@ -288,6 +399,12 @@ export const createSupabaseOrderFn = createServerFn({ method: 'POST' })
       pixQrCode: charge.pixQrCode,
       pixCopyPaste: charge.pixCopyPaste,
     };
+    } catch (error) {
+      console.error('[checkout] createSupabaseOrderFn:', error);
+      const message =
+        error instanceof Error ? error.message : 'Erro inesperado ao finalizar o pedido.';
+      return { ok: false as const, message };
+    }
   });
 
 export const getCheckoutPaymentFn = createServerFn({ method: 'POST' })

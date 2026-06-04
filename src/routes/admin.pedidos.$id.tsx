@@ -14,6 +14,7 @@ import {
   SelectValue,
 } from '@/components/ui/select';
 import { Loader2 } from 'lucide-react';
+import { DeleteOrderButton } from '@/components/admin/DeleteOrderButton';
 import { adminGetOrderFn, adminUpdateOrderStatusFn } from '@/lib/orders.server';
 import { updateShipmentFn } from '@/lib/shipping.server';
 import { getCorreiosTrackingUrl, validateTrackingCode } from '@/lib/shipping/correios-service';
@@ -307,6 +308,20 @@ function AdminOrderDetailPage() {
                 ))}
               </ul>
             )}
+          </div>
+
+          <div className="premium-card rounded-xl p-6 border border-destructive/30 space-y-3">
+            <h2 className="font-display text-lg text-destructive">Excluir pedido</h2>
+            <p className="text-sm text-muted-foreground">
+              Remove este pedido do sistema e devolve o estoque dos produtos. Ação irreversível.
+            </p>
+            <DeleteOrderButton
+              orderId={order.id}
+              accessToken={accessToken}
+              size="default"
+              className="border-destructive bg-destructive/10 text-destructive hover:bg-destructive/20"
+              onDeleted={() => navigate({ to: '/admin/pedidos' })}
+            />
           </div>
         </div>
       </div>

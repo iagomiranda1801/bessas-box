@@ -4,6 +4,7 @@ import { toast } from 'sonner';
 import { AdminLayout } from '@/components/admin/AdminLayout';
 import {
   ProductForm,
+  formValuesToAdminPayload,
   parsePriceToCents,
   type ProductFormValues,
 } from '@/components/admin/ProductForm';
@@ -47,6 +48,7 @@ function AdminNewProductPage() {
     setSaving(true);
     try {
       const priceCents = parsePriceToCents(values.priceReais);
+      const sizePayload = formValuesToAdminPayload(values);
       const result = await adminCreateProductFn({
         data: {
           accessToken,
@@ -54,7 +56,9 @@ function AdminNewProductPage() {
           slug: values.slug?.trim() || undefined,
           description: values.description,
           priceCents,
-          stockQuantity: values.stockQuantity,
+          stockQuantity: sizePayload.stockQuantity,
+          productCategory: sizePayload.productCategory,
+          sizeStock: sizePayload.sizeStock,
           isActive: values.isActive,
           isFeatured: values.isFeatured,
         },
