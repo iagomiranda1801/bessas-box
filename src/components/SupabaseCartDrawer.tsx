@@ -31,10 +31,6 @@ function formatCepLocationLine(info: CepInfo): string {
   return parts.join(' · ');
 }
 
-function isUuid(value: string): boolean {
-  return /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(value);
-}
-
 export function SupabaseCartDrawer() {
   const navigate = useNavigate();
   const [isOpen, setIsOpen] = useState(false);
@@ -55,7 +51,7 @@ export function SupabaseCartDrawer() {
   const totalCents = useSupabaseCartStore((s) => s.totalCents());
 
   const customerEmail = useCustomerStore((s) => s.email);
-  const customerUserId = useCustomerStore((s) => s.userId);
+  const customerAccessToken = useCustomerStore((s) => s.accessToken);
   const isLoggedIn = useCustomerStore((s) => s.isLoggedIn());
 
   const addressTouchedRef = useRef(false);
@@ -189,10 +185,7 @@ export function SupabaseCartDrawer() {
           customerEmail: trimmedEmail,
           customerCpf: cleanCpf(customerCpf),
           shippingName: name,
-          userId:
-            isLoggedIn && customerUserId && isUuid(customerUserId)
-              ? customerUserId
-              : undefined,
+          accessToken: isLoggedIn && customerAccessToken ? customerAccessToken : undefined,
           items: items.map((i) => ({
             productId: i.productId,
             color: i.color,
@@ -228,6 +221,7 @@ export function SupabaseCartDrawer() {
       navigate({
         to: '/checkout/pagar/$orderId',
         params: { orderId: result.orderId },
+        search: { token: result.paymentAccessToken },
         state: {
           pixQrCode: result.pixQrCode ?? null,
           pixCopyPaste: result.pixCopyPaste ?? null,

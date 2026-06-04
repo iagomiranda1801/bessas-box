@@ -1,4 +1,5 @@
 import { createServerFn } from '@tanstack/react-start';
+import { createHmac, timingSafeEqual } from 'node:crypto';
 import { z } from 'zod';
 import { getPaymentProvider } from '@/lib/catalog-config';
 import { getPayment, getPixQrCode, isAsaasConfigured } from '@/lib/payments/asaas-client';
@@ -18,7 +19,7 @@ import {
   sumVariantStock,
   type VariantStock,
 } from '@/lib/product-variants';
-import { getSupabaseServiceClient } from '@/lib/supabase-server';
+import { getSupabaseAnonServerClient, getSupabaseServiceClient } from '@/lib/supabase-server';
 
 const checkoutItemSchema = z.object({
   productId: z.string().uuid(),
@@ -46,7 +47,7 @@ const createOrderSchema = z.object({
     .min(1)
     .transform((value) => cleanCpf(value))
     .pipe(z.string().length(11, 'CPF inválido.')),
-  userId: z.string().uuid().optional(),
+  accessToken: z.string().min(1).optional(),
   items: z.array(checkoutItemSchema).min(1),
   shippingName: z.string().min(1).max(200),
   shippingPhone: z.string().max(30).optional(),
@@ -63,6 +64,60 @@ const createOrderSchema = z.object({
 const SCHEMA_COLUMN_ERROR = /schema cache|could not find the '[^']+' column/i;
 
 type OrderInsert = Record<string, unknown>;
+
+async function resolveCheckoutUserId(
+  accessToken: string | undefined,
+  customerEmail: string,
+): Promise<{ ok: true; userId: string | null } | { ok: false; message: string }> {
+  if (!accessToken) return { ok: true, userId: null };
+
+  const { data, error } = await getSupabaseAnonServerClient().auth.getUser(accessToken);
+  if (error || !data.user?.email) {
+    return { ok: false, message: 'Sessao expirada. Entre novamente para vincular o pedido.' };
+  }
+
+  if (data.user.email.toLowerCase() !== customerEmail.trim().toLowerCase()) {
+    return { ok: false, message: 'O e-mail do pedido precisa ser o mesmo da conta logada.' };
+  }
+
+  return { ok: true, userId: data.user.id };
+}
+
+function paymentAccessSecret(): string {
+  const secret =
+    process.env.PAYMENT_ACCESS_SECRET?.trim() ??
+    process.env.SUPABASE_SERVICE_ROLE_KEY?.trim();
+  if (!secret) throw new Error('PAYMENT_ACCESS_SECRET ou SUPABASE_SERVICE_ROLE_KEY ausente.');
+  return secret;
+}
+
+function buildPaymentAccessToken(orderId: string): string {
+  return createHmac('sha256', paymentAccessSecret()).update(orderId).digest('hex');
+}
+
+function verifyPaymentAccessToken(orderId: string, token: string | undefined): boolean {
+  if (!token) return false;
+  try {
+    const expected = Buffer.from(buildPaymentAccessToken(orderId), 'hex');
+    const received = Buffer.from(token, 'hex');
+    return expected.length === received.length && timingSafeEqual(expected, received);
+  } catch {
+    return false;
+  }
+}
+
+async function customerCanAccessOrder(
+  customerAccessToken: string | undefined,
+  order: { user_id?: string | null; customer_email?: string | null },
+): Promise<boolean> {
+  if (!customerAccessToken) return false;
+  const { data, error } = await getSupabaseAnonServerClient().auth.getUser(customerAccessToken);
+  if (error || !data.user?.email) return false;
+  return (
+    data.user.id === order.user_id ||
+    data.user.email.toLowerCase() === order.customer_email?.toLowerCase()
+  );
+}
 
 async function decrementLegacyStock(
   client: ReturnType<typeof getSupabaseServiceClient>,
@@ -81,9 +136,10 @@ async function decrementLegacyStock(
 function buildOrderInsertAttempts(
   data: z.infer<typeof createOrderSchema>,
   totalCents: number,
+  userId: string | null,
 ): OrderInsert[] {
   const common = {
-    user_id: data.userId ?? null,
+    user_id: userId,
     customer_email: data.customerEmail,
     total_cents: totalCents,
     payment_provider: getPaymentProvider(),
@@ -159,7 +215,7 @@ function buildChargeInsert(
 }
 
 const orderPaymentSelect = `
-  id, status, total_cents, payment_id, payment_provider,
+  id, user_id, status, total_cents, payment_id, payment_provider,
   customer_email, shipping_name, created_at, paid_at
 `;
 
@@ -308,6 +364,9 @@ export const createSupabaseOrderFn = createServerFn({ method: 'POST' })
       return { ok: false as const, message: 'CPF inválido.' };
     }
 
+    const checkoutUser = await resolveCheckoutUserId(data.accessToken, data.customerEmail);
+    if (!checkoutUser.ok) return checkoutUser;
+
     const client = getSupabaseServiceClient();
     const productIds = data.items.map((i) => i.productId);
 
@@ -371,7 +430,7 @@ export const createSupabaseOrderFn = createServerFn({ method: 'POST' })
 
     totalCents += data.shippingCostCents ?? 0;
 
-    const insertAttempts = buildOrderInsertAttempts(data, totalCents);
+    const insertAttempts = buildOrderInsertAttempts(data, totalCents, checkoutUser.userId);
     let order: Record<string, unknown> | null = null;
     let orderError: { message: string } | null = null;
     let usedLegacySchema = false;
@@ -533,10 +592,13 @@ export const createSupabaseOrderFn = createServerFn({ method: 'POST' })
       })
       .eq('id', orderId);
 
+    const paymentAccessToken = buildPaymentAccessToken(orderId);
+
     return {
       ok: true as const,
       orderId,
-      checkoutUrl: charge.checkoutUrl ?? `/checkout/pagar/${orderId}`,
+      paymentAccessToken,
+      checkoutUrl: `${charge.checkoutUrl ?? `/checkout/pagar/${orderId}`}?token=${paymentAccessToken}`,
       pixQrCode: charge.pixQrCode,
       pixCopyPaste: charge.pixCopyPaste,
     };
@@ -549,7 +611,13 @@ export const createSupabaseOrderFn = createServerFn({ method: 'POST' })
   });
 
 export const getCheckoutPaymentFn = createServerFn({ method: 'POST' })
-  .inputValidator(z.object({ orderId: z.string().uuid() }))
+  .inputValidator(
+    z.object({
+      orderId: z.string().uuid(),
+      paymentAccessToken: z.string().optional(),
+      customerAccessToken: z.string().optional(),
+    }),
+  )
   .handler(async ({ data }) => {
     const client = getSupabaseServiceClient();
 
@@ -561,6 +629,14 @@ export const getCheckoutPaymentFn = createServerFn({ method: 'POST' })
 
     if (error || !order) {
       return { ok: false as const, message: 'Pedido não encontrado.' };
+    }
+
+    const authorized =
+      verifyPaymentAccessToken(data.orderId, data.paymentAccessToken) ||
+      (await customerCanAccessOrder(data.customerAccessToken, order));
+
+    if (!authorized) {
+      return { ok: false as const, message: 'Acesso ao pagamento nao autorizado.' };
     }
 
     const row = order as OrderRow & {
@@ -599,18 +675,32 @@ export const getCheckoutPaymentFn = createServerFn({ method: 'POST' })
   });
 
 export const getOrderPaymentStatusFn = createServerFn({ method: 'POST' })
-  .inputValidator(z.object({ orderId: z.string().uuid() }))
+  .inputValidator(
+    z.object({
+      orderId: z.string().uuid(),
+      paymentAccessToken: z.string().optional(),
+      customerAccessToken: z.string().optional(),
+    }),
+  )
   .handler(async ({ data }) => {
     const client = getSupabaseServiceClient();
 
     const { data: order, error } = await client
       .from('orders')
-      .select('id, status, paid_at')
+      .select('id, status, paid_at, user_id, customer_email')
       .eq('id', data.orderId)
       .maybeSingle();
 
     if (error || !order) {
       return { ok: false as const, message: 'Pedido não encontrado.' };
+    }
+
+    const authorized =
+      verifyPaymentAccessToken(data.orderId, data.paymentAccessToken) ||
+      (await customerCanAccessOrder(data.customerAccessToken, order));
+
+    if (!authorized) {
+      return { ok: false as const, message: 'Acesso ao pagamento nao autorizado.' };
     }
 
     return {

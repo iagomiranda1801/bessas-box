@@ -93,12 +93,15 @@ export class AsaasProvider implements PaymentProvider {
 
   async handleWebhook(payload: unknown, headers?: Headers): Promise<PaymentWebhookResult | null> {
     const webhookToken = process.env.ASAAS_WEBHOOK_TOKEN?.trim();
-    if (webhookToken) {
-      const received = headers?.get('asaas-access-token');
-      if (received !== webhookToken) {
-        console.warn('[asaas] Webhook token inválido');
-        return null;
-      }
+    if (!webhookToken) {
+      console.warn('[asaas] ASAAS_WEBHOOK_TOKEN ausente; webhook recusado');
+      return null;
+    }
+
+    const received = headers?.get('asaas-access-token');
+    if (received !== webhookToken) {
+      console.warn('[asaas] Webhook token invalido');
+      return null;
     }
 
     const body = payload as {

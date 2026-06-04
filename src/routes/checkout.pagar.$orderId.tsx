@@ -8,6 +8,7 @@ import { PixPaymentPanel } from '@/components/checkout/PixPaymentPanel';
 import { Button } from '@/components/ui/button';
 import { getCheckoutPaymentFn, getOrderPaymentStatusFn } from '@/lib/checkout.server';
 import { formatCents, shortOrderId } from '@/lib/admin-utils';
+import { useCustomerStore } from '@/stores/customerStore';
 
 export const Route = createFileRoute('/checkout/pagar/$orderId')({
   params: {
@@ -16,6 +17,9 @@ export const Route = createFileRoute('/checkout/pagar/$orderId')({
     }),
     stringify: ({ orderId }) => ({ orderId }),
   },
+  validateSearch: (search: Record<string, unknown>) => ({
+    token: typeof search.token === 'string' ? search.token : undefined,
+  }),
   component: CheckoutPaymentPage,
   head: () => ({
     meta: [{ title: "Pagamento — Bessa's Box" }],
@@ -41,6 +45,8 @@ type CheckoutPaymentNavState = {
 
 function CheckoutPaymentPage() {
   const { orderId } = Route.useParams();
+  const { token: paymentAccessToken } = Route.useSearch();
+  const customerAccessToken = useCustomerStore((s) => s.accessToken);
   const navState = useRouterState({
     select: (s) => (s.location.state ?? {}) as CheckoutPaymentNavState,
   });
@@ -56,7 +62,9 @@ function CheckoutPaymentPage() {
 
     async function load() {
       if (!hasNavPix) setLoading(true);
-      const result = await getCheckoutPaymentFn({ data: { orderId } });
+      const result = await getCheckoutPaymentFn({
+        data: { orderId, paymentAccessToken, customerAccessToken: customerAccessToken ?? undefined },
+      });
       if (cancelled) return;
       if (!result.ok) {
         setError(result.message);
@@ -76,13 +84,15 @@ function CheckoutPaymentPage() {
     return () => {
       cancelled = true;
     };
-  }, [orderId, hasNavPix, navState.pixQrCode, navState.pixCopyPaste]);
+  }, [orderId, paymentAccessToken, customerAccessToken, hasNavPix, navState.pixQrCode, navState.pixCopyPaste]);
 
   useEffect(() => {
     if (!order || order.status === 'paid' || order.status === 'cancelled') return;
 
     const interval = setInterval(async () => {
-      const result = await getOrderPaymentStatusFn({ data: { orderId } });
+      const result = await getOrderPaymentStatusFn({
+        data: { orderId, paymentAccessToken, customerAccessToken: customerAccessToken ?? undefined },
+      });
       if (!result.ok) return;
       if (result.status === 'paid' || result.status === 'cancelled') {
         setOrder((prev) => (prev ? { ...prev, status: result.status } : prev));
@@ -90,7 +100,7 @@ function CheckoutPaymentPage() {
     }, 3000);
 
     return () => clearInterval(interval);
-  }, [order, orderId]);
+  }, [order, orderId, paymentAccessToken, customerAccessToken]);
 
   const panelStatus =
     order?.status === 'paid'

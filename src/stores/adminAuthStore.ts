@@ -52,7 +52,7 @@ export const useAdminAuthStore = create<AdminAuthStore>()(
     }),
     {
       name: 'bessa-admin-auth',
-      storage: createJSONStorage(() => localStorage),
+      storage: createJSONStorage(() => sessionStorage),
       partialize: (state) => ({
         accessToken: state.accessToken,
         email: state.email,
