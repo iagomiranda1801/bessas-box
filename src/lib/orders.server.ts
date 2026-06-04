@@ -9,9 +9,25 @@ import {
   type SizeProfile,
   type SizeStock,
 } from '@/lib/product-sizes';
+import {
+  DEFAULT_COLOR,
+  flattenToSizeStock,
+  normalizeVariantStock,
+  resolveProductColors,
+  sumVariantStock,
+  type VariantStock,
+} from '@/lib/product-variants';
 import { getSupabaseServiceClient } from '@/lib/supabase-server';
 
 const SCHEMA_COLUMN_ERROR = /schema cache|could not find the '[^']+' column/i;
+
+function parseColorFromOrderItem(item: {
+  color?: string | null;
+  product_title: string;
+}): string {
+  if (item.color?.trim()) return item.color.trim();
+  return DEFAULT_COLOR;
+}
 
 function parseSizeFromOrderItem(item: {
   size?: string | null;
@@ -19,23 +35,78 @@ function parseSizeFromOrderItem(item: {
 }): string | null {
   if (item.size?.trim()) return item.size.trim();
   const match = item.product_title.match(/ — (.+)$/);
-  return match?.[1]?.trim() ?? null;
+  const suffix = match?.[1]?.trim();
+  if (!suffix) return null;
+  const parts = suffix.split(' — ');
+  return parts[parts.length - 1]?.trim() ?? suffix;
 }
 
 async function restoreProductStock(
   client: SupabaseClient,
   productId: string,
+  color: string,
   size: string | null,
   quantity: number,
 ) {
   const { data: product, error } = await client
     .from('products')
-    .select('stock_quantity, size_stock, size_profile')
+    .select(
+      'stock_quantity, size_stock, size_profile, product_colors, variant_stock',
+    )
     .eq('id', productId)
     .maybeSingle();
 
   if (error || !product) return;
 
+  const profile = (product.size_profile as SizeProfile) ?? 'apparel';
+  const hasVariantStock =
+    product.variant_stock &&
+    typeof product.variant_stock === 'object' &&
+    Object.keys(product.variant_stock as object).length > 0 &&
+    size;
+
+  if (hasVariantStock && size) {
+    const colors = resolveProductColors(product.product_colors as string[] | null);
+    const variantStock = normalizeVariantStock(
+      profile,
+      colors,
+      product.variant_stock as VariantStock,
+    );
+    const row = variantStock[color] ?? {};
+    row[size] = (row[size] ?? 0) + quantity;
+    variantStock[color] = row;
+    const sizeStock = flattenToSizeStock(profile, variantStock);
+    const newTotal = sumVariantStock(variantStock);
+    const { error: updateError } = await client
+      .from('products')
+      .update({
+        variant_stock: variantStock,
+        size_stock: sizeStock,
+        stock_quantity: newTotal,
+        updated_at: new Date().toISOString(),
+      })
+      .eq('id', productId);
+
+    if (updateError && SCHEMA_COLUMN_ERROR.test(updateError.message)) {
+      await restoreLegacySizeStock(client, productId, product, size, quantity);
+    }
+    return;
+  }
+
+  await restoreLegacySizeStock(client, productId, product, size, quantity);
+}
+
+async function restoreLegacySizeStock(
+  client: SupabaseClient,
+  productId: string,
+  product: {
+    stock_quantity: number;
+    size_stock?: SizeStock | null;
+    size_profile?: string | null;
+  },
+  size: string | null,
+  quantity: number,
+) {
   const profile = (product.size_profile as SizeProfile) ?? 'apparel';
   const hasSizeStock =
     product.size_stock &&
@@ -234,7 +305,7 @@ export const adminDeleteOrderFn = createServerFn({ method: 'POST' })
 
     let fetchResult = await client
       .from('orders')
-      .select('id, order_items (id, product_id, quantity, size, product_title)')
+      .select('id, order_items (id, product_id, quantity, size, color, product_title)')
       .eq('id', data.id)
       .maybeSingle();
 
@@ -255,13 +326,15 @@ export const adminDeleteOrderFn = createServerFn({ method: 'POST' })
       product_id: string | null;
       quantity: number;
       size?: string | null;
+      color?: string | null;
       product_title: string;
     }>;
 
     for (const item of items) {
       if (!item.product_id) continue;
+      const color = parseColorFromOrderItem(item);
       const size = parseSizeFromOrderItem(item);
-      await restoreProductStock(client, item.product_id, size, item.quantity);
+      await restoreProductStock(client, item.product_id, color, size, item.quantity);
     }
 
     const { error: deleteError } = await client.from('orders').delete().eq('id', data.id);

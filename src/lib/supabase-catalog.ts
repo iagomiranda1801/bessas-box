@@ -1,15 +1,17 @@
 import type { AdminProductRow, StoreProduct } from '@/lib/catalog-types';
 import {
-  buildVariantId,
   getSizesForProfile,
   inferCategoryFromTitle,
-  initialSizeStockFromTotal,
-  normalizeSizeStock,
-  sumSizeStock,
   type ProductCategory,
   type SizeProfile,
-  type SizeStock,
 } from '@/lib/product-sizes';
+import {
+  buildVariantId,
+  formatVariantLabel,
+  resolveProductColors,
+  resolveVariantStock,
+  sumVariantStock,
+} from '@/lib/product-variants';
 import { getSupabaseAnonServerClient, getSupabaseServiceClient } from '@/lib/supabase-server';
 
 function parseProductCategory(value: string | null | undefined): ProductCategory {
@@ -35,15 +37,6 @@ function parseSizeProfile(value: string | null | undefined): SizeProfile {
   return 'apparel';
 }
 
-function resolveSizeStock(row: AdminProductRow): SizeStock {
-  const profile = parseSizeProfile(row.size_profile);
-  const raw = row.size_stock;
-  if (raw && typeof raw === 'object' && Object.keys(raw).length > 0) {
-    return normalizeSizeStock(profile, raw as SizeStock);
-  }
-  return initialSizeStockFromTotal(profile, row.stock_quantity ?? 0);
-}
-
 function mapRowToStoreProduct(row: AdminProductRow): StoreProduct {
   const images = [...(row.product_images ?? [])].sort(
     (a, b) => a.sort_order - b.sort_order,
@@ -53,20 +46,36 @@ function mapRowToStoreProduct(row: AdminProductRow): StoreProduct {
     ? parseProductCategory(row.product_category)
     : inferCategoryFromTitle(row.title);
   const sizeProfile = parseSizeProfile(row.size_profile);
-  const sizeStock = resolveSizeStock(row);
+  const productColors = resolveProductColors(row.product_colors);
+  const variantStock = resolveVariantStock(
+    sizeProfile,
+    productColors,
+    row.variant_stock ?? undefined,
+    row.size_stock ?? undefined,
+    row.stock_quantity ?? 0,
+  );
   const sizes = getSizesForProfile(sizeProfile);
 
-  const variants = sizes.map((size) => {
-    const qty = sizeStock[size] ?? 0;
-    return {
-      id: buildVariantId(row.id, size),
-      title: size,
-      price: { amount: priceAmount, currencyCode: row.currency || 'BRL' },
-      availableForSale: row.is_active && qty > 0,
-      quantityAvailable: qty,
-      selectedOptions: [{ name: 'Tamanho', value: size }],
-    };
-  });
+  const variants: StoreProduct['variants'] = [];
+  for (const color of productColors) {
+    for (const size of sizes) {
+      const qty = variantStock[color]?.[size] ?? 0;
+      variants.push({
+        id: buildVariantId(row.id, color, size),
+        title: formatVariantLabel(color, size, {
+          colorCount: productColors.length,
+          sizeCount: sizes.length,
+        }),
+        price: { amount: priceAmount, currencyCode: row.currency || 'BRL' },
+        availableForSale: row.is_active && qty > 0,
+        quantityAvailable: qty,
+        selectedOptions: [
+          { name: 'Cor', value: color },
+          { name: 'Tamanho', value: size },
+        ],
+      });
+    }
+  }
 
   return {
     id: row.id,
@@ -81,7 +90,7 @@ function mapRowToStoreProduct(row: AdminProductRow): StoreProduct {
     variants,
     isActive: row.is_active,
     isFeatured: row.is_featured,
-    stockQuantity: sumSizeStock(sizeStock),
+    stockQuantity: sumVariantStock(variantStock),
     productCategory,
     sizeProfile,
   };
@@ -89,7 +98,8 @@ function mapRowToStoreProduct(row: AdminProductRow): StoreProduct {
 
 const PRODUCT_SELECT = `
   id, title, slug, description, price_cents, currency, stock_quantity,
-  is_active, is_featured, product_category, size_profile, size_stock, created_at,
+  is_active, is_featured, product_category, size_profile, size_stock,
+  product_colors, variant_stock, created_at,
   product_images ( id, storage_path, public_url, alt_text, sort_order, is_primary )
 `;
 

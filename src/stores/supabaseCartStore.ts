@@ -1,9 +1,10 @@
 import { create } from 'zustand';
 import { persist, createJSONStorage } from 'zustand/middleware';
-import { cartLineKey } from '@/lib/product-sizes';
+import { cartLineKey, DEFAULT_COLOR } from '@/lib/product-variants';
 
 export type SupabaseCartItem = {
   productId: string;
+  color: string;
   size: string;
   slug: string;
   title: string;
@@ -21,10 +22,11 @@ type SupabaseCartStore = {
   ) => { ok: boolean; message?: string };
   updateQuantity: (
     productId: string,
+    color: string,
     size: string,
     quantity: number,
   ) => { ok: boolean; message?: string };
-  removeItem: (productId: string, size: string) => void;
+  removeItem: (productId: string, color: string, size: string) => void;
   clearCart: () => void;
   totalCents: () => number;
 };
@@ -35,9 +37,9 @@ export const useSupabaseCartStore = create<SupabaseCartStore>()(
       items: [],
 
       addItem: (item, quantity = 1) => {
-        const key = cartLineKey(item.productId, item.size);
+        const key = cartLineKey(item.productId, item.color, item.size);
         const existing = get().items.find(
-          (i) => cartLineKey(i.productId, i.size) === key,
+          (i) => cartLineKey(i.productId, i.color, i.size) === key,
         );
         const nextQty = (existing?.quantity ?? 0) + quantity;
         if (nextQty > item.stockQuantity) {
@@ -46,7 +48,7 @@ export const useSupabaseCartStore = create<SupabaseCartStore>()(
         if (existing) {
           set({
             items: get().items.map((i) =>
-              cartLineKey(i.productId, i.size) === key
+              cartLineKey(i.productId, i.color, i.size) === key
                 ? { ...i, quantity: nextQty, stockQuantity: item.stockQuantity }
                 : i,
             ),
@@ -57,14 +59,14 @@ export const useSupabaseCartStore = create<SupabaseCartStore>()(
         return { ok: true };
       },
 
-      updateQuantity: (productId, size, quantity) => {
-        const key = cartLineKey(productId, size);
+      updateQuantity: (productId, color, size, quantity) => {
+        const key = cartLineKey(productId, color, size);
         if (quantity <= 0) {
-          get().removeItem(productId, size);
+          get().removeItem(productId, color, size);
           return { ok: true };
         }
         const item = get().items.find(
-          (i) => cartLineKey(i.productId, i.size) === key,
+          (i) => cartLineKey(i.productId, i.color, i.size) === key,
         );
         if (!item) return { ok: false, message: 'Item não encontrado.' };
         if (quantity > item.stockQuantity) {
@@ -72,17 +74,17 @@ export const useSupabaseCartStore = create<SupabaseCartStore>()(
         }
         set({
           items: get().items.map((i) =>
-            cartLineKey(i.productId, i.size) === key ? { ...i, quantity } : i,
+            cartLineKey(i.productId, i.color, i.size) === key ? { ...i, quantity } : i,
           ),
         });
         return { ok: true };
       },
 
-      removeItem: (productId, size) => {
-        const key = cartLineKey(productId, size);
+      removeItem: (productId, color, size) => {
+        const key = cartLineKey(productId, color, size);
         set({
           items: get().items.filter(
-            (i) => cartLineKey(i.productId, i.size) !== key,
+            (i) => cartLineKey(i.productId, i.color, i.size) !== key,
           ),
         });
       },
@@ -95,14 +97,20 @@ export const useSupabaseCartStore = create<SupabaseCartStore>()(
     {
       name: 'bessa-supabase-cart',
       storage: createJSONStorage(() => localStorage),
-      version: 2,
+      version: 3,
       migrate: (persisted, version) => {
         const state = persisted as { items?: Array<Record<string, unknown>> };
-        if (version < 2 && state?.items) {
-          state.items = state.items.map((item) => ({
-            ...item,
-            size: typeof item.size === 'string' ? item.size : 'M',
-          }));
+        if (state?.items) {
+          state.items = state.items.map((item) => {
+            const size = typeof item.size === 'string' ? item.size : 'M';
+            const color =
+              typeof item.color === 'string'
+                ? item.color
+                : version < 3
+                  ? DEFAULT_COLOR
+                  : DEFAULT_COLOR;
+            return { ...item, size, color };
+          });
         }
         return state as SupabaseCartStore;
       },
@@ -110,5 +118,5 @@ export const useSupabaseCartStore = create<SupabaseCartStore>()(
   ),
 );
 
-export { parseVariantId as parseSupabaseVariantId } from '@/lib/product-sizes';
-export { buildVariantId as supabaseVariantId } from '@/lib/product-sizes';
+export { parseVariantId as parseSupabaseVariantId } from '@/lib/product-variants';
+export { buildVariantId as supabaseVariantId } from '@/lib/product-variants';

@@ -1,21 +1,28 @@
 import { createServerFn } from '@tanstack/react-start';
 import { z } from 'zod';
 import { getPaymentProvider } from '@/lib/catalog-config';
+import { getPayment, getPixQrCode, isAsaasConfigured } from '@/lib/payments/asaas-client';
+import { buildDemoPixCharge } from '@/lib/payments/asaas.provider';
 import { getPaymentProviderInstance } from '@/lib/payments';
 import { cleanCpf, validateCpf } from '@/lib/cpf-utils';
 import type { OrderRow, OrderStatus } from '@/lib/order-types';
 import type { PaymentChargeStatus } from '@/lib/payment-charge-types';
 import type { PaymentChargeResult } from '@/lib/payments/types';
+import type { SizeProfile, SizeStock } from '@/lib/product-sizes';
 import {
-  normalizeSizeStock,
-  sumSizeStock,
-  type SizeProfile,
-  type SizeStock,
-} from '@/lib/product-sizes';
+  availableStockForProduct,
+  DEFAULT_COLOR,
+  flattenToSizeStock,
+  resolveProductColors,
+  resolveVariantStock,
+  sumVariantStock,
+  type VariantStock,
+} from '@/lib/product-variants';
 import { getSupabaseServiceClient } from '@/lib/supabase-server';
 
 const checkoutItemSchema = z.object({
   productId: z.string().uuid(),
+  color: z.string().min(1).optional(),
   size: z.string().min(1),
   quantity: z.number().int().positive(),
 });
@@ -28,15 +35,9 @@ type CheckoutProductRow = {
   is_active: boolean;
   size_stock?: SizeStock | null;
   size_profile?: SizeProfile | string | null;
+  product_colors?: string[] | null;
+  variant_stock?: VariantStock | null;
 };
-
-function stockForSize(product: CheckoutProductRow, size: string): number {
-  if (product.size_stock && typeof product.size_stock === 'object') {
-    const qty = product.size_stock[size];
-    if (typeof qty === 'number') return qty;
-  }
-  return product.stock_quantity;
-}
 
 const createOrderSchema = z.object({
   customerEmail: z.string().email(),
@@ -62,6 +63,20 @@ const createOrderSchema = z.object({
 const SCHEMA_COLUMN_ERROR = /schema cache|could not find the '[^']+' column/i;
 
 type OrderInsert = Record<string, unknown>;
+
+async function decrementLegacyStock(
+  client: ReturnType<typeof getSupabaseServiceClient>,
+  product: CheckoutProductRow,
+  quantity: number,
+) {
+  await client
+    .from('products')
+    .update({
+      stock_quantity: product.stock_quantity - quantity,
+      updated_at: new Date().toISOString(),
+    })
+    .eq('id', product.id);
+}
 
 function buildOrderInsertAttempts(
   data: z.infer<typeof createOrderSchema>,
@@ -131,7 +146,7 @@ function buildChargeInsert(
     order_id: orderId,
     provider: getPaymentProvider(),
     external_id: charge.paymentId,
-    billing_type: 'PIX',
+    billing_type: 'UNDEFINED',
     amount_cents: totalCents,
     status: 'pending' as PaymentChargeStatus,
     pix_qr_code: charge.pixQrCode ?? payload?.pixQrCode ?? null,
@@ -147,6 +162,128 @@ const orderPaymentSelect = `
   id, status, total_cents, payment_id, payment_provider,
   customer_email, shipping_name, created_at, paid_at
 `;
+
+type PixDisplay = {
+  pixQrCode: string | null;
+  pixCopyPaste: string | null;
+  invoiceUrl: string | null;
+  expiresAt: string | null;
+  isDemo: boolean;
+};
+
+type PaymentChargeRow = {
+  pix_qr_code: string | null;
+  pix_copy_paste: string | null;
+  invoice_url: string | null;
+  expires_at: string | null;
+  external_id: string | null;
+  metadata: Record<string, unknown> | null;
+};
+
+async function persistPaymentCharge(
+  client: ReturnType<typeof getSupabaseServiceClient>,
+  chargeRow: ReturnType<typeof buildChargeInsert>,
+): Promise<void> {
+  const full = await client.from('payment_charges').insert(chargeRow);
+  if (!full.error) return;
+
+  if (SCHEMA_COLUMN_ERROR.test(full.error.message)) {
+    const minimal = {
+      order_id: chargeRow.order_id,
+      provider: chargeRow.provider,
+      external_id: chargeRow.external_id,
+      billing_type: chargeRow.billing_type,
+      amount_cents: chargeRow.amount_cents,
+      status: chargeRow.status,
+      pix_qr_code: chargeRow.pix_qr_code,
+      pix_copy_paste: chargeRow.pix_copy_paste,
+    };
+    const retry = await client.from('payment_charges').insert(minimal);
+    if (retry.error) {
+      console.warn('[checkout] payment_charges:', retry.error.message);
+    }
+    return;
+  }
+
+  console.warn('[checkout] payment_charges:', full.error.message);
+}
+
+async function resolvePixDisplay(
+  orderId: string,
+  order: { payment_id?: string | null; payment_provider?: string | null },
+  charge: PaymentChargeRow | null,
+): Promise<PixDisplay> {
+  const chargeInvoiceUrl = charge?.invoice_url ?? null;
+
+  if (charge?.pix_copy_paste || charge?.pix_qr_code) {
+    const metadata = (charge.metadata ?? {}) as Record<string, unknown>;
+    return {
+      pixQrCode: charge.pix_qr_code,
+      pixCopyPaste: charge.pix_copy_paste,
+      invoiceUrl: chargeInvoiceUrl,
+      expiresAt: charge.expires_at,
+      isDemo: metadata.demo === true,
+    };
+  }
+
+  const paymentId = order.payment_id?.trim();
+  if (!paymentId) {
+    return {
+      pixQrCode: null,
+      pixCopyPaste: null,
+      invoiceUrl: chargeInvoiceUrl,
+      expiresAt: null,
+      isDemo: false,
+    };
+  }
+
+  if (paymentId.startsWith('asaas-stub-') || paymentId.startsWith('mp-stub-')) {
+    const demo = buildDemoPixCharge({ id: orderId });
+    const payload = demo.chargePayload;
+    return {
+      pixQrCode: demo.pixQrCode ?? payload?.pixQrCode ?? null,
+      pixCopyPaste: demo.pixCopyPaste ?? payload?.pixCopyPaste ?? null,
+      invoiceUrl: chargeInvoiceUrl,
+      expiresAt: payload?.expiresAt ?? null,
+      isDemo: true,
+    };
+  }
+
+  if (getPaymentProvider() === 'asaas' && isAsaasConfigured()) {
+    let invoiceUrl = chargeInvoiceUrl;
+    let pixQrCode: string | null = null;
+    let pixCopyPaste: string | null = null;
+    let expiresAt: string | null = null;
+
+    try {
+      const pix = await getPixQrCode(paymentId);
+      pixQrCode = pix.encodedImage;
+      pixCopyPaste = pix.payload;
+      expiresAt = pix.expirationDate ?? null;
+    } catch (error) {
+      console.warn('[checkout] Falha ao buscar Pix no Asaas:', error);
+    }
+
+    if (!invoiceUrl) {
+      try {
+        const payment = await getPayment(paymentId);
+        invoiceUrl = payment.invoiceUrl ?? null;
+      } catch (error) {
+        console.warn('[checkout] Falha ao buscar fatura no Asaas:', error);
+      }
+    }
+
+    return { pixQrCode, pixCopyPaste, invoiceUrl, expiresAt, isDemo: false };
+  }
+
+  return {
+    pixQrCode: null,
+    pixCopyPaste: null,
+    invoiceUrl: chargeInvoiceUrl,
+    expiresAt: null,
+    isDemo: false,
+  };
+}
 
 function orderRowForCharge(
   order: Record<string, unknown>,
@@ -176,7 +313,9 @@ export const createSupabaseOrderFn = createServerFn({ method: 'POST' })
 
     let productsResult = await client
       .from('products')
-      .select('id, title, price_cents, stock_quantity, is_active, size_stock, size_profile')
+      .select(
+        'id, title, price_cents, stock_quantity, is_active, size_stock, size_profile, product_colors, variant_stock',
+      )
       .in('id', productIds);
 
     if (productsResult.error && SCHEMA_COLUMN_ERROR.test(productsResult.error.message)) {
@@ -199,6 +338,7 @@ export const createSupabaseOrderFn = createServerFn({ method: 'POST' })
       quantity: number;
       unit_price_cents: number;
       size: string;
+      color: string;
     }> = [];
 
     for (const item of data.items) {
@@ -206,20 +346,26 @@ export const createSupabaseOrderFn = createServerFn({ method: 'POST' })
       if (!product?.is_active) {
         return { ok: false as const, message: `Produto indisponível.` };
       }
-      const available = stockForSize(product, item.size);
+      const color = item.color || DEFAULT_COLOR;
+      const available = availableStockForProduct(product, color, item.size);
       if (available < item.quantity) {
+        const label =
+          color !== DEFAULT_COLOR ? `${color} / ${item.size}` : item.size;
         return {
           ok: false as const,
-          message: `Estoque insuficiente para ${product.title} (tamanho ${item.size}).`,
+          message: `Estoque insuficiente para ${product.title} (${label}).`,
         };
       }
       totalCents += product.price_cents * item.quantity;
+      const titleSuffix =
+        color !== DEFAULT_COLOR ? `${color} — ${item.size}` : item.size;
       lineItems.push({
         product_id: product.id,
-        product_title: `${product.title} — ${item.size}`,
+        product_title: `${product.title} — ${titleSuffix}`,
         quantity: item.quantity,
         unit_price_cents: product.price_cents,
         size: item.size,
+        color,
       });
     }
 
@@ -265,6 +411,7 @@ export const createSupabaseOrderFn = createServerFn({ method: 'POST' })
           quantity: li.quantity,
           unit_price_cents: li.unit_price_cents,
           size: li.size,
+          color: li.color,
         })),
       )
     ).error;
@@ -278,6 +425,7 @@ export const createSupabaseOrderFn = createServerFn({ method: 'POST' })
             product_title: li.product_title,
             quantity: li.quantity,
             unit_price_cents: li.unit_price_cents,
+            size: li.size,
           })),
         )
       ).error;
@@ -291,41 +439,37 @@ export const createSupabaseOrderFn = createServerFn({ method: 'POST' })
     for (const item of data.items) {
       const product = productMap.get(item.productId)!;
       const profile = (product.size_profile as SizeProfile) ?? 'apparel';
-      const hasSizeStock =
-        product.size_stock &&
-        typeof product.size_stock === 'object' &&
-        Object.keys(product.size_stock).length > 0;
+      const color = item.color || DEFAULT_COLOR;
+      const colors = resolveProductColors(product.product_colors);
+      const variantStock = resolveVariantStock(
+        profile,
+        colors,
+        product.variant_stock as VariantStock | undefined,
+        product.size_stock as SizeStock | undefined,
+        product.stock_quantity,
+      );
+      const hasResolvedStock = sumVariantStock(variantStock) > 0;
 
-      if (hasSizeStock) {
-        const sizeStock = normalizeSizeStock(profile, product.size_stock as SizeStock);
-        const current = sizeStock[item.size] ?? 0;
-        sizeStock[item.size] = Math.max(0, current - item.quantity);
-        const newTotal = sumSizeStock(sizeStock);
+      if (hasResolvedStock) {
+        const row = variantStock[color] ?? {};
+        row[item.size] = Math.max(0, (row[item.size] ?? 0) - item.quantity);
+        variantStock[color] = row;
+        const sizeStock = flattenToSizeStock(profile, variantStock);
+        const newTotal = sumVariantStock(variantStock);
         const { error: stockError } = await client
           .from('products')
           .update({
+            variant_stock: variantStock,
             size_stock: sizeStock,
             stock_quantity: newTotal,
             updated_at: new Date().toISOString(),
           })
           .eq('id', item.productId);
         if (stockError && SCHEMA_COLUMN_ERROR.test(stockError.message)) {
-          await client
-            .from('products')
-            .update({
-              stock_quantity: product.stock_quantity - item.quantity,
-              updated_at: new Date().toISOString(),
-            })
-            .eq('id', item.productId);
+          await decrementLegacyStock(client, product, item.quantity);
         }
       } else {
-        await client
-          .from('products')
-          .update({
-            stock_quantity: product.stock_quantity - item.quantity,
-            updated_at: new Date().toISOString(),
-          })
-          .eq('id', item.productId);
+        await decrementLegacyStock(client, product, item.quantity);
       }
     }
 
@@ -340,7 +484,7 @@ export const createSupabaseOrderFn = createServerFn({ method: 'POST' })
     }
 
     if (data.shippingMethod && data.shippingCostCents != null) {
-      await client.from('shipments').insert({
+      const { error: shipmentError } = await client.from('shipments').insert({
         order_id: orderId,
         shipping_method: data.shippingMethod,
         carrier_service: data.carrierService || null,
@@ -354,9 +498,10 @@ export const createSupabaseOrderFn = createServerFn({ method: 'POST' })
           ...data.shippingAddress,
         },
         status: 'pending',
-      }).catch(() => {
-        console.warn('[checkout] Erro ao criar shipment');
       });
+      if (shipmentError) {
+        console.warn('[checkout] Erro ao criar shipment:', shipmentError.message);
+      }
     }
 
     let charge: PaymentChargeResult;
@@ -378,11 +523,7 @@ export const createSupabaseOrderFn = createServerFn({ method: 'POST' })
     }
 
     const chargeRow = buildChargeInsert(orderId, totalCents, data.customerCpf, charge);
-    const { error: chargeError } = await client.from('payment_charges').insert(chargeRow);
-
-    if (chargeError) {
-      console.warn('[checkout] payment_charges ausente — rode payment_charges.sql');
-    }
+    await persistPaymentCharge(client, chargeRow);
 
     await client
       .from('orders')
@@ -434,7 +575,7 @@ export const getCheckoutPaymentFn = createServerFn({ method: 'POST' })
       .limit(1)
       .maybeSingle();
 
-    const metadata = (charge?.metadata ?? {}) as Record<string, unknown>;
+    const pix = await resolvePixDisplay(data.orderId, row, charge as PaymentChargeRow | null);
 
     return {
       ok: true as const,
@@ -447,10 +588,11 @@ export const getCheckoutPaymentFn = createServerFn({ method: 'POST' })
         createdAt: row.created_at,
         paidAt: row.paid_at,
         items: row.order_items ?? [],
-        pixQrCode: charge?.pix_qr_code ?? null,
-        pixCopyPaste: charge?.pix_copy_paste ?? null,
-        expiresAt: charge?.expires_at ?? null,
-        isDemo: metadata.demo === true,
+        pixQrCode: pix.pixQrCode,
+        pixCopyPaste: pix.pixCopyPaste,
+        invoiceUrl: pix.invoiceUrl,
+        expiresAt: pix.expiresAt,
+        isDemo: pix.isDemo,
         chargeStatus: (charge?.status as PaymentChargeStatus | undefined) ?? 'pending',
       },
     };

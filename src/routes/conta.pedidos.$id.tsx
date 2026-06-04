@@ -73,9 +73,31 @@ function CustomerOrderDetailPage() {
                 <OrderStatusBadge status={order.status} />
               </div>
 
+              {(order.status === 'pending' || order.status === 'awaiting_payment') && (
+                <div className="premium-card rounded-xl p-5 space-y-3 border-gold/30">
+                  <div>
+                    <p className="text-sm font-medium text-foreground">Pagamento pendente</p>
+                    <p className="text-xs text-muted-foreground">
+                      Conclua o pagamento para liberar o envio do seu pedido.
+                    </p>
+                  </div>
+                  <Link
+                    to="/checkout/pagar/$orderId"
+                    params={{ orderId: order.id }}
+                    className="inline-flex w-full items-center justify-center rounded-md bg-gold px-4 py-2.5 text-sm font-medium text-onyx transition-colors hover:bg-gold-soft"
+                  >
+                    Pagar agora
+                  </Link>
+                </div>
+              )}
+
               <div className="premium-card rounded-xl p-6 space-y-4">
                 <div className="flex justify-between items-center">
-                  <span className="text-muted-foreground text-sm">Total pago</span>
+                  <span className="text-muted-foreground text-sm">
+                    {order.status === 'pending' || order.status === 'awaiting_payment'
+                      ? 'Total'
+                      : 'Total pago'}
+                  </span>
                   <span className="text-gold font-display text-xl">{formatCents(order.total_cents)}</span>
                 </div>
 

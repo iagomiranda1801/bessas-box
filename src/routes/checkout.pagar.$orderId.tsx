@@ -1,4 +1,4 @@
-import { createFileRoute, Link } from '@tanstack/react-router';
+import { createFileRoute, Link, useRouterState } from '@tanstack/react-router';
 import { useEffect, useState } from 'react';
 import { ChevronDown, ChevronUp } from 'lucide-react';
 import { z } from 'zod';
@@ -18,7 +18,7 @@ export const Route = createFileRoute('/checkout/pagar/$orderId')({
   },
   component: CheckoutPaymentPage,
   head: () => ({
-    meta: [{ title: "Pagamento Pix — Bessa's Box" }],
+    meta: [{ title: "Pagamento — Bessa's Box" }],
   }),
 });
 
@@ -29,29 +29,45 @@ type PaymentOrder = {
   items: Array<{ product_title: string; quantity: number; unit_price_cents: number }>;
   pixQrCode: string | null;
   pixCopyPaste: string | null;
+  invoiceUrl: string | null;
   expiresAt: string | null;
   isDemo: boolean;
 };
 
+type CheckoutPaymentNavState = {
+  pixQrCode?: string | null;
+  pixCopyPaste?: string | null;
+};
+
 function CheckoutPaymentPage() {
   const { orderId } = Route.useParams();
+  const navState = useRouterState({
+    select: (s) => (s.location.state ?? {}) as CheckoutPaymentNavState,
+  });
   const [order, setOrder] = useState<PaymentOrder | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [showItems, setShowItems] = useState(false);
 
+  const hasNavPix = Boolean(navState.pixCopyPaste || navState.pixQrCode);
+
   useEffect(() => {
     let cancelled = false;
 
     async function load() {
-      setLoading(true);
+      if (!hasNavPix) setLoading(true);
       const result = await getCheckoutPaymentFn({ data: { orderId } });
       if (cancelled) return;
       if (!result.ok) {
         setError(result.message);
         setOrder(null);
       } else {
-        setOrder(result.order);
+        const loaded = result.order;
+        setOrder({
+          ...loaded,
+          pixQrCode: loaded.pixQrCode ?? navState.pixQrCode ?? null,
+          pixCopyPaste: loaded.pixCopyPaste ?? navState.pixCopyPaste ?? null,
+        });
       }
       setLoading(false);
     }
@@ -60,7 +76,7 @@ function CheckoutPaymentPage() {
     return () => {
       cancelled = true;
     };
-  }, [orderId]);
+  }, [orderId, hasNavPix, navState.pixQrCode, navState.pixCopyPaste]);
 
   useEffect(() => {
     if (!order || order.status === 'paid' || order.status === 'cancelled') return;
@@ -87,7 +103,24 @@ function CheckoutPaymentPage() {
     <div className="min-h-screen bg-background bg-mesh-dark">
       <SiteHeader homeOnlyNav={false} />
       <main className="pt-24 pb-16 max-w-lg mx-auto px-4">
-        {loading ? (
+        {loading && hasNavPix && !order ? (
+          <div className="premium-card rounded-xl p-6 sm:p-8 space-y-6 animate-fade-in-up">
+            <div className="text-center space-y-1">
+              <p className="text-gold text-xs tracking-[0.25em] uppercase">Pagamento</p>
+              <h1 className="font-display text-2xl sm:text-3xl">Finalize seu pedido</h1>
+              <p className="text-xs text-muted-foreground font-mono">#{shortOrderId(orderId)}</p>
+            </div>
+            <PixPaymentPanel
+              pixQrCode={navState.pixQrCode ?? null}
+              pixCopyPaste={navState.pixCopyPaste ?? null}
+              invoiceUrl={null}
+              expiresAt={null}
+              isDemo={false}
+              status="awaiting"
+              totalLabel="…"
+            />
+          </div>
+        ) : loading && !hasNavPix ? (
           <p className="text-center text-muted-foreground text-sm">Carregando pagamento…</p>
         ) : error || !order ? (
           <div className="premium-card rounded-xl p-8 text-center space-y-4">
@@ -99,7 +132,7 @@ function CheckoutPaymentPage() {
         ) : (
           <div className="premium-card rounded-xl p-6 sm:p-8 space-y-6 animate-fade-in-up">
             <div className="text-center space-y-1">
-              <p className="text-gold text-xs tracking-[0.25em] uppercase">Pagamento Pix</p>
+              <p className="text-gold text-xs tracking-[0.25em] uppercase">Pagamento</p>
               <h1 className="font-display text-2xl sm:text-3xl">Finalize seu pedido</h1>
               <p className="text-xs text-muted-foreground font-mono">#{shortOrderId(order.id)}</p>
             </div>
@@ -107,6 +140,7 @@ function CheckoutPaymentPage() {
             <PixPaymentPanel
               pixQrCode={order.pixQrCode}
               pixCopyPaste={order.pixCopyPaste}
+              invoiceUrl={order.invoiceUrl}
               expiresAt={order.expiresAt}
               isDemo={order.isDemo}
               status={panelStatus}

@@ -1,4 +1,4 @@
-import { Check, Copy, Loader2 } from 'lucide-react';
+import { Check, Copy, ExternalLink } from 'lucide-react';
 import { useEffect, useState } from 'react';
 import { toast } from 'sonner';
 import { Button } from '@/components/ui/button';
@@ -8,6 +8,7 @@ import { cn } from '@/lib/utils';
 type PixPaymentPanelProps = {
   pixQrCode: string | null;
   pixCopyPaste: string | null;
+  invoiceUrl?: string | null;
   expiresAt: string | null;
   isDemo?: boolean;
   status: 'awaiting' | 'paid' | 'cancelled';
@@ -17,6 +18,7 @@ type PixPaymentPanelProps = {
 export function PixPaymentPanel({
   pixQrCode,
   pixCopyPaste,
+  invoiceUrl,
   expiresAt,
   isDemo,
   status,
@@ -47,6 +49,12 @@ export function PixPaymentPanel({
     const id = setInterval(update, 1000);
     return () => clearInterval(id);
   }, [expiresAt, status]);
+
+  const qrImageSrc = pixQrCode
+    ? `data:image/png;base64,${pixQrCode}`
+    : pixCopyPaste
+      ? `https://api.qrserver.com/v1/create-qr-code/?size=240x240&data=${encodeURIComponent(pixCopyPaste)}`
+      : null;
 
   const handleCopy = async () => {
     if (!pixCopyPaste) return;
@@ -88,45 +96,82 @@ export function PixPaymentPanel({
       )}
 
       <div className="flex flex-col items-center gap-4">
-        {pixQrCode ? (
-          <div className="p-3 rounded-xl border-2 border-gold/30 bg-white shadow-lg shadow-gold/10">
-            <img
-              src={`data:image/png;base64,${pixQrCode}`}
-              alt="QR Code Pix"
-              className="w-52 h-52 sm:w-56 sm:h-56"
-            />
-          </div>
-        ) : (
-          <div className="w-52 h-52 sm:w-56 sm:h-56 rounded-xl border-2 border-dashed border-gold/30 flex items-center justify-center bg-gold/5">
-            <Loader2 className="w-8 h-8 animate-spin text-gold/60" />
+        {invoiceUrl && (
+          <div className="w-full max-w-sm space-y-2">
+            <Button
+              asChild
+              className="w-full bg-gold text-onyx hover:bg-gold-soft transition-all"
+            >
+              <a href={invoiceUrl} target="_blank" rel="noopener noreferrer">
+                <ExternalLink className="w-4 h-4 mr-2" />
+                Pagar no Asaas (Pix, cartão ou boleto)
+              </a>
+            </Button>
+            <p className="text-xs text-muted-foreground text-center">
+              Você será levado à página segura do Asaas para concluir o pagamento.
+              Esta tela atualiza sozinha assim que recebermos a confirmação.
+            </p>
           </div>
         )}
 
-        <p className="text-sm text-muted-foreground text-center max-w-xs">
-          Escaneie o QR Code no app do seu banco ou copie o código Pix abaixo.
-        </p>
+        {qrImageSrc && (
+          <div className="w-full max-w-sm flex flex-col items-center gap-4">
+            {invoiceUrl && (
+              <div className="flex items-center gap-3 w-full">
+                <div className="h-px flex-1 bg-gold/15" />
+                <span className="text-xs text-muted-foreground uppercase tracking-wider">
+                  Ou via Pix
+                </span>
+                <div className="h-px flex-1 bg-gold/15" />
+              </div>
+            )}
 
-        {pixCopyPaste && (
-          <Button
-            type="button"
-            onClick={handleCopy}
-            className={cn(
-              'w-full max-w-sm bg-gold text-onyx hover:bg-gold-soft transition-all',
-              copied && 'bg-emerald-600 text-white hover:bg-emerald-600',
+            <div className="p-3 rounded-xl border-2 border-gold/30 bg-white shadow-lg shadow-gold/10">
+              <img
+                src={qrImageSrc}
+                alt="QR Code Pix"
+                className="w-52 h-52 sm:w-56 sm:h-56"
+              />
+            </div>
+
+            <p className="text-sm text-muted-foreground text-center max-w-xs">
+              Escaneie o QR Code no app do seu banco ou copie o código Pix abaixo.
+            </p>
+
+            {pixCopyPaste && (
+              <Button
+                type="button"
+                onClick={handleCopy}
+                variant={invoiceUrl ? 'outline' : 'default'}
+                className={cn(
+                  'w-full transition-all',
+                  invoiceUrl
+                    ? 'border-gold/40'
+                    : 'bg-gold text-onyx hover:bg-gold-soft',
+                  copied && 'bg-emerald-600 text-white hover:bg-emerald-600 border-emerald-600',
+                )}
+              >
+                {copied ? (
+                  <>
+                    <Check className="w-4 h-4 mr-2" />
+                    Copiado!
+                  </>
+                ) : (
+                  <>
+                    <Copy className="w-4 h-4 mr-2" />
+                    Copiar código Pix
+                  </>
+                )}
+              </Button>
             )}
-          >
-            {copied ? (
-              <>
-                <Check className="w-4 h-4 mr-2" />
-                Copiado!
-              </>
-            ) : (
-              <>
-                <Copy className="w-4 h-4 mr-2" />
-                Copiar código Pix
-              </>
-            )}
-          </Button>
+          </div>
+        )}
+
+        {!invoiceUrl && !qrImageSrc && (
+          <div className="w-full max-w-sm rounded-xl border border-amber-500/30 bg-amber-500/10 px-4 py-3 text-center text-sm text-amber-100/90">
+            Não foi possível carregar a cobrança. Atualize a página ou tente
+            novamente em instantes.
+          </div>
         )}
 
         {remaining && (

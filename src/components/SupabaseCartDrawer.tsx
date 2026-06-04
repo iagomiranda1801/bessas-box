@@ -17,7 +17,7 @@ import { calculateShippingFn } from '@/lib/shipping.server';
 import { formatCents } from '@/lib/admin-utils';
 import { useSupabaseCartStore } from '@/stores/supabaseCartStore';
 import { useCustomerStore } from '@/stores/customerStore';
-import { cartLineKey } from '@/lib/product-sizes';
+import { cartLineKey } from '@/lib/product-variants';
 import { formatCep, validateCep } from '@/lib/shipping/cep-service';
 import { cleanCpf, formatCpf, validateCpf } from '@/lib/cpf-utils';
 import type { ShippingOption, CepInfo } from '@/lib/shipping/types';
@@ -90,6 +90,7 @@ export function SupabaseCartDrawer() {
           cep: shippingCep,
           items: items.map((i) => ({
             productId: i.productId,
+            color: i.color,
             size: i.size,
             quantity: i.quantity,
           })),
@@ -194,6 +195,7 @@ export function SupabaseCartDrawer() {
               : undefined,
           items: items.map((i) => ({
             productId: i.productId,
+            color: i.color,
             size: i.size,
             quantity: i.quantity,
           })),
@@ -219,7 +221,18 @@ export function SupabaseCartDrawer() {
       }
       clearCart();
       setIsOpen(false);
-      navigate({ to: '/checkout/pagar/$orderId', params: { orderId: result.orderId } });
+      toast.success('Pedido criado! Complete o pagamento Pix na próxima tela.', {
+        position: 'top-center',
+        duration: 5000,
+      });
+      navigate({
+        to: '/checkout/pagar/$orderId',
+        params: { orderId: result.orderId },
+        state: {
+          pixQrCode: result.pixQrCode ?? null,
+          pixCopyPaste: result.pixCopyPaste ?? null,
+        },
+      });
     } catch (error) {
       console.error('[checkout]', error);
       const message =
@@ -272,7 +285,7 @@ export function SupabaseCartDrawer() {
             <div className="flex-1 min-h-0 overflow-y-auto">
               <ul className="space-y-4 py-4">
                 {items.map((item) => (
-                  <li key={cartLineKey(item.productId, item.size)} className="flex gap-3">
+                  <li key={cartLineKey(item.productId, item.color, item.size)} className="flex gap-3">
                     {item.imageUrl && (
                       <img
                         src={item.imageUrl}
@@ -290,7 +303,12 @@ export function SupabaseCartDrawer() {
                           size="icon"
                           className="h-7 w-7 border-gold/30"
                           onClick={() =>
-                            updateQuantity(item.productId, item.size, item.quantity - 1)
+                            updateQuantity(
+                              item.productId,
+                              item.color,
+                              item.size,
+                              item.quantity - 1,
+                            )
                           }
                         >
                           <Minus className="w-3 h-3" />
@@ -303,10 +321,11 @@ export function SupabaseCartDrawer() {
                           className="h-7 w-7 border-gold/30"
                           onClick={() => {
                             const r = updateQuantity(
-                            item.productId,
-                            item.size,
-                            item.quantity + 1,
-                          );
+                              item.productId,
+                              item.color,
+                              item.size,
+                              item.quantity + 1,
+                            );
                             if (!r.ok) toast.error(r.message, { position: 'top-center' });
                           }}
                         >
@@ -317,7 +336,9 @@ export function SupabaseCartDrawer() {
                           variant="ghost"
                           size="icon"
                           className="h-7 w-7 text-muted-foreground"
-                          onClick={() => removeItem(item.productId, item.size)}
+                          onClick={() =>
+                            removeItem(item.productId, item.color, item.size)
+                          }
                         >
                           <Trash2 className="w-3 h-3" />
                         </Button>

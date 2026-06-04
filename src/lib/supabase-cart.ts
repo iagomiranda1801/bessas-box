@@ -1,13 +1,13 @@
 import type { ShopifyProduct } from '@/lib/shopify';
-import { parseVariantId } from '@/lib/product-sizes';
+import { DEFAULT_COLOR, parseVariantId } from '@/lib/product-variants';
 import { useSupabaseCartStore } from '@/stores/supabaseCartStore';
 
-/** @deprecated Use parseVariantId from product-sizes */
+/** @deprecated Use parseVariantId from product-variants */
 export function parseSupabaseVariantId(variantId: string): string | null {
   return parseVariantId(variantId)?.productId ?? null;
 }
 
-export { buildVariantId as supabaseVariantId } from '@/lib/product-sizes';
+export { buildVariantId as supabaseVariantId } from '@/lib/product-variants';
 
 type VariantNode = {
   id: string;
@@ -17,6 +17,13 @@ type VariantNode = {
   quantityAvailable: number | null;
   selectedOptions: Array<{ name: string; value: string }>;
 };
+
+function formatCartTitle(productTitle: string, color: string, size: string): string {
+  const parts = [productTitle];
+  if (color && color !== DEFAULT_COLOR) parts.push(color);
+  if (size && size !== 'Único') parts.push(size);
+  return parts.length > 1 ? parts.join(' — ') : productTitle;
+}
 
 export function addProductToSupabaseCart(
   product: ShopifyProduct,
@@ -28,19 +35,22 @@ export function addProductToSupabaseCart(
 
   const parsed = parseVariantId(variant.id);
   const productId = parsed?.productId ?? product.node.id;
+  const color =
+    parsed?.color ??
+    variant.selectedOptions.find((o) => o.name === 'Cor')?.value ??
+    DEFAULT_COLOR;
   const size =
     parsed?.size ??
     variant.selectedOptions.find((o) => o.name === 'Tamanho')?.value ??
     variant.title;
   const priceCents = Math.round(parseFloat(variant.price.amount) * 100);
-  const displayTitle =
-    size && size !== 'Default Title' ? `${product.node.title} — ${size}` : product.node.title;
 
   return useSupabaseCartStore.getState().addItem({
     productId,
+    color,
     size,
     slug: product.node.handle,
-    title: displayTitle,
+    title: formatCartTitle(product.node.title, color, size),
     priceCents,
     imageUrl: product.node.images.edges[0]?.node.url ?? null,
     stockQuantity: variant.quantityAvailable ?? 0,

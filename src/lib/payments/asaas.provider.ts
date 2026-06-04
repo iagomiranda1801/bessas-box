@@ -2,9 +2,10 @@ import type { OrderRow } from '@/lib/order-types';
 import type { PaymentChargeResult, PaymentProvider, PaymentWebhookResult } from '@/lib/payments/types';
 import {
   findOrCreateCustomer,
-  createPixPayment,
+  createPayment,
   getPixQrCode,
   isAsaasConfigured,
+  type AsaasPixQrCode,
 } from '@/lib/payments/asaas-client';
 import { cleanCpf } from '@/lib/cpf-utils';
 
@@ -14,6 +15,10 @@ const REFUND_EVENTS = new Set(['PAYMENT_REFUNDED']);
 
 function orderValueReais(order: OrderRow): number {
   return order.total_cents / 100;
+}
+
+export function buildDemoPixCharge(order: Pick<OrderRow, 'id'>): PaymentChargeResult {
+  return buildDemoCharge(order as OrderRow);
 }
 
 function buildDemoCharge(order: OrderRow): PaymentChargeResult {
@@ -55,24 +60,33 @@ export class AsaasProvider implements PaymentProvider {
       phone: order.shipping_phone ?? undefined,
     });
 
-    const payment = await createPixPayment({
+    const payment = await createPayment({
       customerId: customer.id,
       value: orderValueReais(order),
       externalReference: order.id,
+      billingType: 'UNDEFINED',
     });
 
-    const pix = await getPixQrCode(payment.id);
+    // Pix inline é conveniência: não pode derrubar a cobrança se o endpoint
+    // falhar (ex.: conta sem Pix dinâmico). A página de fatura do Asaas
+    // (invoiceUrl) é o destino de pagamento principal.
+    let pix: AsaasPixQrCode | null = null;
+    try {
+      pix = await getPixQrCode(payment.id);
+    } catch (error) {
+      console.warn('[asaas] Pix QR indisponível, usando invoiceUrl:', error);
+    }
 
     return {
       paymentId: payment.id,
       checkoutUrl,
-      pixQrCode: pix.encodedImage,
-      pixCopyPaste: pix.payload,
+      pixQrCode: pix?.encodedImage,
+      pixCopyPaste: pix?.payload,
       chargePayload: {
-        pixQrCode: pix.encodedImage,
-        pixCopyPaste: pix.payload,
+        pixQrCode: pix?.encodedImage,
+        pixCopyPaste: pix?.payload,
         invoiceUrl: payment.invoiceUrl,
-        expiresAt: pix.expirationDate,
+        expiresAt: pix?.expirationDate,
       },
     };
   }

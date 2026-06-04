@@ -119,11 +119,14 @@ export async function findOrCreateCustomer(params: {
   return createCustomer(params);
 }
 
-export async function createPixPayment(params: {
+export type AsaasBillingType = 'UNDEFINED' | 'PIX' | 'BOLETO' | 'CREDIT_CARD';
+
+export async function createPayment(params: {
   customerId: string;
   value: number;
   externalReference: string;
   dueDate?: string;
+  billingType?: AsaasBillingType;
 }): Promise<AsaasPayment> {
   const dueDate =
     params.dueDate ??
@@ -133,12 +136,22 @@ export async function createPixPayment(params: {
     method: 'POST',
     body: JSON.stringify({
       customer: params.customerId,
-      billingType: 'PIX',
+      billingType: params.billingType ?? 'UNDEFINED',
       value: params.value,
       dueDate,
       externalReference: params.externalReference,
     }),
   });
+}
+
+/** @deprecated Use createPayment. Mantido para compatibilidade. */
+export async function createPixPayment(params: {
+  customerId: string;
+  value: number;
+  externalReference: string;
+  dueDate?: string;
+}): Promise<AsaasPayment> {
+  return createPayment({ ...params, billingType: 'PIX' });
 }
 
 export async function getPayment(paymentId: string): Promise<AsaasPayment> {

@@ -18,11 +18,16 @@ import {
 
 import {
   getSizeProfileForCategory,
-  normalizeSizeStock,
-  sumSizeStock,
   type ProductCategory,
-  type SizeStock,
 } from '@/lib/product-sizes';
+import {
+  flattenToSizeStock,
+  normalizeVariantStock,
+  resolveProductColors,
+  resolveVariantStock,
+  sumVariantStock,
+  type VariantStock,
+} from '@/lib/product-variants';
 import { getSupabaseServiceClient } from '@/lib/supabase-server';
 
 const productCategorySchema = z.enum([
@@ -41,7 +46,8 @@ const productInputSchema = z.object({
   priceCents: z.number().int().positive(),
   stockQuantity: z.number().int().min(0),
   productCategory: productCategorySchema,
-  sizeStock: z.record(z.string(), z.coerce.number().int().min(0)),
+  productColors: z.array(z.string().min(1)).min(1),
+  variantStock: z.record(z.string(), z.record(z.string(), z.coerce.number().int().min(0))),
   isActive: z.boolean(),
   isFeatured: z.boolean(),
   slug: z.string().max(80).optional(),
@@ -52,8 +58,14 @@ const SCHEMA_COLUMN_ERROR = /schema cache|could not find the '[^']+' column/i;
 function buildProductDbPayload(data: z.infer<typeof productInputSchema>) {
   const productCategory = data.productCategory as ProductCategory;
   const sizeProfile = getSizeProfileForCategory(productCategory);
-  const sizeStock = normalizeSizeStock(sizeProfile, data.sizeStock as SizeStock);
-  const stockQuantity = sumSizeStock(sizeStock);
+  const productColors = resolveProductColors(data.productColors);
+  const variantStock = normalizeVariantStock(
+    sizeProfile,
+    productColors,
+    data.variantStock as VariantStock,
+  );
+  const sizeStock = flattenToSizeStock(sizeProfile, variantStock);
+  const stockQuantity = sumVariantStock(variantStock);
 
   return {
     title: data.title,
@@ -62,6 +74,8 @@ function buildProductDbPayload(data: z.infer<typeof productInputSchema>) {
     stock_quantity: stockQuantity,
     product_category: productCategory,
     size_profile: sizeProfile,
+    product_colors: productColors,
+    variant_stock: variantStock,
     size_stock: sizeStock,
     is_active: data.isActive,
     is_featured: data.isFeatured,

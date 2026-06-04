@@ -188,6 +188,30 @@ function AdminOrderDetailPage() {
                   Ver cobrança no Asaas ↗
                 </a>
               )}
+              {latestCharge?.invoice_url && (
+                <div className="flex flex-wrap items-center gap-3 pt-1">
+                  <a
+                    href={latestCharge.invoice_url}
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    className="text-xs text-gold hover:underline"
+                  >
+                    Link de pagamento do cliente ↗
+                  </a>
+                  <button
+                    type="button"
+                    onClick={() => {
+                      void navigator.clipboard
+                        .writeText(latestCharge.invoice_url as string)
+                        .then(() => toast.success('Link de pagamento copiado!'))
+                        .catch(() => toast.error('Não foi possível copiar.'));
+                    }}
+                    className="text-xs text-muted-foreground hover:text-foreground underline"
+                  >
+                    Copiar link
+                  </button>
+                </div>
+              )}
             </div>
           )}
           {order.shipping_name && (

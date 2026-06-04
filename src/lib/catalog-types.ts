@@ -13,6 +13,7 @@ export type StoreProductVariant = {
 };
 
 import type { ProductCategory, SizeProfile, SizeStock } from '@/lib/product-sizes';
+import type { VariantStock } from '@/lib/product-variants';
 
 export type StoreProduct = {
   id: string;
@@ -42,6 +43,8 @@ export type AdminProductRow = {
   product_category?: ProductCategory | string | null;
   size_profile?: SizeProfile | string | null;
   size_stock?: SizeStock | null;
+  product_colors?: string[] | null;
+  variant_stock?: VariantStock | null;
   created_at: string;
   product_images: Array<{
     id: string;

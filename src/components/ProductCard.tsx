@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { Link } from "@tanstack/react-router";
 import { Button } from "@/components/ui/button";
 import {
@@ -11,6 +11,13 @@ import {
 import { Loader2, Plus, Sparkles } from "lucide-react";
 import { addProductToSupabaseCart } from "@/lib/supabase-cart";
 import type { ShopifyProduct } from "@/lib/shopify";
+import {
+  findVariantByOptions,
+  firstAvailableSizeForColor,
+  getOptionValues,
+  initialVariantSelection,
+} from "@/lib/variant-selection";
+import { COLOR_SWATCH_HEX } from "@/lib/product-variants";
 import { toast } from "sonner";
 import { cn } from "@/lib/utils";
 
@@ -22,7 +29,10 @@ type ProductCardProps = {
 
 export function ProductCard({ product, featured = false, className }: ProductCardProps) {
   const [addingVariantId, setAddingVariantId] = useState<string | null>(null);
-  const variants = product.node.variants.edges.map((e) => e.node);
+  const variants = useMemo(
+    () => product.node.variants.edges.map((e) => e.node),
+    [product.node.id],
+  );
   const variantIds = variants.map((v) => v.id);
   const isAddingThisProduct =
     addingVariantId != null && variantIds.includes(addingVariantId);
@@ -35,12 +45,42 @@ export function ProductCard({ product, featured = false, className }: ProductCar
     singleVariant.quantityAvailable > 0 &&
     singleVariant.quantityAvailable <= 5;
 
+  const colors = useMemo(() => getOptionValues(variants, "Cor"), [variants]);
+  const showColorPicker = colors.length > 1;
+
   const [variantDialogOpen, setVariantDialogOpen] = useState(false);
-  const [selectedVariantId, setSelectedVariantId] = useState<string | null>(null);
+  const [selectedColor, setSelectedColor] = useState<string | null>(null);
+  const [selectedSize, setSelectedSize] = useState<string | null>(null);
+
+  useEffect(() => {
+    if (!variantDialogOpen) return;
+    const { color, size } = initialVariantSelection(variants);
+    setSelectedColor(color);
+    setSelectedSize(size);
+  }, [variantDialogOpen, product.node.id]);
+
+  const sizesForColor = useMemo(() => {
+    if (!selectedColor) return getOptionValues(variants, "Tamanho");
+    return getOptionValues(
+      variants.filter(
+        (v) => v.selectedOptions.find((o) => o.name === "Cor")?.value === selectedColor,
+      ),
+      "Tamanho",
+    );
+  }, [variants, selectedColor]);
+
+  const showSizePicker = sizesForColor.length > 1;
+
+  const selectedVariant = useMemo(() => {
+    if (selectedColor && selectedSize) {
+      return findVariantByOptions(variants, selectedColor, selectedSize);
+    }
+    return variants.find((v) => v.availableForSale) ?? variants[0];
+  }, [variants, selectedColor, selectedSize]);
 
   const addVariantToCart = async (variant: (typeof variants)[0]) => {
     if (!variant.availableForSale) {
-      toast.error("Este tamanho está esgotado");
+      toast.error("Esta combinação está esgotada");
       return;
     }
 
@@ -63,7 +103,6 @@ export function ProductCard({ product, featured = false, className }: ProductCar
     e.stopPropagation();
 
     if (hasMultipleVariants) {
-      setSelectedVariantId(variants.find((v) => v.availableForSale)?.id ?? variants[0]?.id ?? null);
       setVariantDialogOpen(true);
       return;
     }
@@ -72,8 +111,13 @@ export function ProductCard({ product, featured = false, className }: ProductCar
     await addVariantToCart(singleVariant);
   };
 
-  const selectedVariant = variants.find((v) => v.id === selectedVariantId) ?? variants[0];
   const canQuickAddSingle = singleVariant?.availableForSale ?? false;
+
+  const handleColorSelect = (color: string) => {
+    setSelectedColor(color);
+    const nextSize = firstAvailableSizeForColor(variants, color);
+    setSelectedSize(nextSize);
+  };
 
   return (
     <>
@@ -155,7 +199,7 @@ export function ProductCard({ product, featured = false, className }: ProductCar
             )}
             aria-label={
               hasMultipleVariants
-                ? `Escolher tamanho e adicionar ${product.node.title} à sacola`
+                ? `Escolher cor e tamanho e adicionar ${product.node.title} à sacola`
                 : `Adicionar ${product.node.title} à sacola`
             }
           >
@@ -174,27 +218,80 @@ export function ProductCard({ product, featured = false, className }: ProductCar
             <DialogTitle className="font-display text-xl normal-case">
               {product.node.title}
             </DialogTitle>
-            <DialogDescription>Selecione o tamanho para adicionar à sacola</DialogDescription>
+            <DialogDescription>Escolha cor e tamanho para adicionar à sacola</DialogDescription>
           </DialogHeader>
-          <div className="flex flex-wrap gap-2 py-2">
-            {variants.map((v) => (
-              <button
-                key={v.id}
-                type="button"
-                onClick={() => setSelectedVariantId(v.id)}
-                disabled={!v.availableForSale}
-                className={cn(
-                  "px-4 py-2 border rounded-md text-sm transition-colors",
-                  selectedVariant?.id === v.id
-                    ? "border-gold bg-gold/10 text-gold"
-                    : "border-border hover:border-gold/60",
-                  !v.availableForSale && "opacity-40 line-through",
-                )}
-              >
-                {v.title}
-              </button>
-            ))}
-          </div>
+
+          {showColorPicker && (
+            <div className="space-y-2">
+              <p className="text-xs tracking-widest uppercase text-muted-foreground">Cor</p>
+              <div className="flex flex-wrap gap-2">
+                {colors.map((color) => {
+                  const swatch = COLOR_SWATCH_HEX[color];
+                  const hasStock = variants.some(
+                    (v) =>
+                      v.selectedOptions.find((o) => o.name === "Cor")?.value === color &&
+                      v.availableForSale,
+                  );
+                  return (
+                    <button
+                      key={color}
+                      type="button"
+                      onClick={() => handleColorSelect(color)}
+                      disabled={!hasStock}
+                      className={cn(
+                        "inline-flex items-center gap-2 px-3 py-1.5 rounded-full border text-sm transition-colors",
+                        selectedColor === color
+                          ? "border-gold bg-gold/10 text-gold"
+                          : "border-border hover:border-gold/60",
+                        !hasStock && "opacity-40 line-through",
+                      )}
+                    >
+                      {swatch && (
+                        <span
+                          className="w-3 h-3 rounded-full border border-border"
+                          style={{ backgroundColor: swatch }}
+                          aria-hidden
+                        />
+                      )}
+                      {color}
+                    </button>
+                  );
+                })}
+              </div>
+            </div>
+          )}
+
+          {showSizePicker && (
+            <div className="space-y-2">
+              <p className="text-xs tracking-widest uppercase text-muted-foreground">Tamanho</p>
+              <div className="flex flex-wrap gap-2">
+                {sizesForColor.map((size) => {
+                  const variant =
+                    selectedColor != null
+                      ? findVariantByOptions(variants, selectedColor, size)
+                      : undefined;
+                  return (
+                    <button
+                      key={size}
+                      type="button"
+                      onClick={() => setSelectedSize(size)}
+                      disabled={!variant?.availableForSale}
+                      className={cn(
+                        "px-4 py-2 border rounded-md text-sm transition-colors",
+                        selectedSize === size
+                          ? "border-gold bg-gold/10 text-gold"
+                          : "border-border hover:border-gold/60",
+                        !variant?.availableForSale && "opacity-40 line-through",
+                      )}
+                    >
+                      {size}
+                    </button>
+                  );
+                })}
+              </div>
+            </div>
+          )}
+
           <Button
             onClick={() => selectedVariant && addVariantToCart(selectedVariant)}
             disabled={

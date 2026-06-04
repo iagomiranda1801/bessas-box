@@ -32,9 +32,6 @@ export const PRODUCT_CATEGORIES: Array<{
 
 const CATEGORY_BY_ID = new Map(PRODUCT_CATEGORIES.map((c) => [c.id, c]));
 
-const VARIANT_PREFIX = 'supabase-variant-';
-const VARIANT_SEPARATOR = '--';
-
 export function getSizeProfileForCategory(category: ProductCategory): SizeProfile {
   return CATEGORY_BY_ID.get(category)?.sizeProfile ?? 'apparel';
 }
@@ -70,27 +67,12 @@ export function normalizeSizeStock(
   return normalized;
 }
 
-export function buildVariantId(productId: string, size: string): string {
-  return `${VARIANT_PREFIX}${productId}${VARIANT_SEPARATOR}${encodeURIComponent(size)}`;
-}
-
-export function parseVariantId(
-  variantId: string,
-): { productId: string; size: string } | null {
-  if (!variantId.startsWith(VARIANT_PREFIX)) return null;
-  const rest = variantId.slice(VARIANT_PREFIX.length);
-  const sepIndex = rest.indexOf(VARIANT_SEPARATOR);
-  if (sepIndex === -1) {
-    return { productId: rest, size: getSizesForProfile('apparel')[0] ?? 'M' };
-  }
-  const productId = rest.slice(0, sepIndex);
-  const size = decodeURIComponent(rest.slice(sepIndex + VARIANT_SEPARATOR.length));
-  return productId ? { productId, size } : null;
-}
-
-export function cartLineKey(productId: string, size: string): string {
-  return `${productId}::${size}`;
-}
+export {
+  buildVariantId,
+  cartLineKey,
+  DEFAULT_COLOR,
+  parseVariantId,
+} from '@/lib/product-variants';
 
 /** Heurística para migrar produtos existentes sem categoria. */
 export function inferCategoryFromTitle(title: string): ProductCategory {

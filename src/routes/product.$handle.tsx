@@ -1,5 +1,5 @@
 import { createFileRoute, Link, notFound } from "@tanstack/react-router";
-import { useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { ArrowLeft, Loader2, ShoppingBag, Truck, ShieldCheck } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { SiteHeader } from "@/components/SiteHeader";
@@ -8,6 +8,13 @@ import { fetchProductByHandleForStore } from "@/lib/catalog";
 import { addProductToSupabaseCart } from "@/lib/supabase-cart";
 import { toast } from "sonner";
 import { cn } from "@/lib/utils";
+import {
+  findVariantByOptions,
+  firstAvailableSizeForColor,
+  getOptionValues,
+  initialVariantSelection,
+} from "@/lib/variant-selection";
+import { COLOR_SWATCH_HEX } from "@/lib/product-variants";
 
 export const Route = createFileRoute("/product/$handle")({
   loader: async ({ params }) => {
@@ -43,12 +50,46 @@ export const Route = createFileRoute("/product/$handle")({
 function ProductPage() {
   const { product } = Route.useLoaderData();
   const [adding, setAdding] = useState(false);
-  const [selectedVariantId, setSelectedVariantId] = useState<string | null>(null);
+  const [selectedColor, setSelectedColor] = useState<string | null>(null);
+  const [selectedSize, setSelectedSize] = useState<string | null>(null);
   const [selectedImageIndex, setSelectedImageIndex] = useState(0);
 
-  const variants = product.node.variants.edges;
-  const selectedVariant =
-    variants.find((v) => v.node.id === selectedVariantId)?.node ?? variants[0]?.node;
+  const variantNodes = useMemo(
+    () => product.node.variants.edges.map((e) => e.node),
+    [product.node.id],
+  );
+  const colors = useMemo(() => getOptionValues(variantNodes, "Cor"), [variantNodes]);
+  const showColorPicker = colors.length > 1;
+
+  useEffect(() => {
+    const { color, size } = initialVariantSelection(variantNodes);
+    setSelectedColor(color);
+    setSelectedSize(size);
+  }, [product.node.id]);
+
+  const sizesForColor = useMemo(() => {
+    if (!selectedColor) return getOptionValues(variantNodes, "Tamanho");
+    return getOptionValues(
+      variantNodes.filter(
+        (v) => v.selectedOptions.find((o) => o.name === "Cor")?.value === selectedColor,
+      ),
+      "Tamanho",
+    );
+  }, [variantNodes, selectedColor]);
+
+  const showSizePicker = sizesForColor.length > 1;
+
+  const selectedVariant = useMemo(() => {
+    if (selectedColor && selectedSize) {
+      return findVariantByOptions(variantNodes, selectedColor, selectedSize);
+    }
+    return variantNodes.find((v) => v.availableForSale) ?? variantNodes[0];
+  }, [variantNodes, selectedColor, selectedSize]);
+
+  const handleColorSelect = (color: string) => {
+    setSelectedColor(color);
+    setSelectedSize(firstAvailableSizeForColor(variantNodes, color));
+  };
   const images = product.node.images.edges;
   const activeImage = images[selectedImageIndex]?.node ?? images[0]?.node;
   const thumbnails = images.slice(0, 6);
@@ -150,31 +191,84 @@ function ProductPage() {
               </p>
             )}
 
-            {variants.length > 1 && (
-              <div className="space-y-3">
-                <p className="text-sm tracking-[0.15em] uppercase font-medium" id="variant-label">
-                  Tamanho
-                </p>
-                <div className="flex flex-wrap gap-2" role="group" aria-labelledby="variant-label">
-                  {variants.map(({ node: v }) => (
-                    <button
-                      key={v.id}
-                      type="button"
-                      onClick={() => setSelectedVariantId(v.id)}
-                      disabled={!v.availableForSale}
-                      aria-pressed={selectedVariant?.id === v.id}
-                      className={cn(
-                        "px-5 py-2.5 border rounded-lg text-sm transition-all duration-200",
-                        selectedVariant?.id === v.id
-                          ? "border-gold bg-gold/10 text-gold shadow-gold"
-                          : "border-border hover:border-gold/60 hover:bg-gold/5",
-                        !v.availableForSale && "opacity-40 line-through",
-                      )}
-                    >
-                      {v.title}
-                    </button>
-                  ))}
-                </div>
+            {(showColorPicker || showSizePicker) && (
+              <div className="space-y-6">
+                {showColorPicker && (
+                  <div className="space-y-3">
+                    <p className="text-sm tracking-[0.15em] uppercase font-medium" id="color-label">
+                      Cor
+                    </p>
+                    <div className="flex flex-wrap gap-2" role="group" aria-labelledby="color-label">
+                      {colors.map((color) => {
+                        const swatch = COLOR_SWATCH_HEX[color];
+                        const hasStock = variantNodes.some(
+                          (v) =>
+                            v.selectedOptions.find((o) => o.name === "Cor")?.value === color &&
+                            v.availableForSale,
+                        );
+                        return (
+                          <button
+                            key={color}
+                            type="button"
+                            onClick={() => handleColorSelect(color)}
+                            disabled={!hasStock}
+                            aria-pressed={selectedColor === color}
+                            className={cn(
+                              "inline-flex items-center gap-2 px-4 py-2.5 border rounded-lg text-sm transition-all duration-200",
+                              selectedColor === color
+                                ? "border-gold bg-gold/10 text-gold shadow-gold"
+                                : "border-border hover:border-gold/60 hover:bg-gold/5",
+                              !hasStock && "opacity-40 line-through",
+                            )}
+                          >
+                            {swatch && (
+                              <span
+                                className="w-3 h-3 rounded-full border border-border"
+                                style={{ backgroundColor: swatch }}
+                                aria-hidden
+                              />
+                            )}
+                            {color}
+                          </button>
+                        );
+                      })}
+                    </div>
+                  </div>
+                )}
+
+                {showSizePicker && (
+                  <div className="space-y-3">
+                    <p className="text-sm tracking-[0.15em] uppercase font-medium" id="size-label">
+                      Tamanho
+                    </p>
+                    <div className="flex flex-wrap gap-2" role="group" aria-labelledby="size-label">
+                      {sizesForColor.map((size) => {
+                        const variant =
+                          selectedColor != null
+                            ? findVariantByOptions(variantNodes, selectedColor, size)
+                            : undefined;
+                        return (
+                          <button
+                            key={size}
+                            type="button"
+                            onClick={() => setSelectedSize(size)}
+                            disabled={!variant?.availableForSale}
+                            aria-pressed={selectedSize === size}
+                            className={cn(
+                              "px-5 py-2.5 border rounded-lg text-sm transition-all duration-200",
+                              selectedSize === size
+                                ? "border-gold bg-gold/10 text-gold shadow-gold"
+                                : "border-border hover:border-gold/60 hover:bg-gold/5",
+                              !variant?.availableForSale && "opacity-40 line-through",
+                            )}
+                          >
+                            {size}
+                          </button>
+                        );
+                      })}
+                    </div>
+                  </div>
+                )}
               </div>
             )}
 
